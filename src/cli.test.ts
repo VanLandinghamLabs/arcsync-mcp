@@ -155,7 +155,8 @@ describe("buildServerApi", () => {
     const { api } = buildServerApi(d);
     await expect(api.get("/graphs")).rejects.toThrow("https://connect");
     settle(CRED);
-    await new Promise((r) => setTimeout(r, 10));
-    expect(d.logs[0]).toMatch(/^arcsync-mcp: connected, but could not save/);
+    await vi.waitFor(() =>
+      expect(d.logs[0]).toMatch(/^arcsync-mcp: connected, but could not save/),
+    );
   });
 });
