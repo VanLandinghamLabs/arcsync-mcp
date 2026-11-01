@@ -1,0 +1,566 @@
+import { FOLD_VERBS } from "./edgeSemantics.js";
+import { fallbackRailFor, railLabelFor, readAttributeEntry } from "./fallbackRail.js";
+import { lookupByType } from "./typeLookup.js";
+import type {
+  ArchGraph,
+  FallbackRail,
+  NetworkGlueKind,
+  ResourceEdge,
+  ResourceNode,
+} from "./types.js";
+import { EdgeType, ResourceType } from "./types.js";
+
+/**
+ * Folds a networking "join" resource into the node that owns it.
+ *
+ * A VPC template built by hand or by CDK emits roughly nine of these per
+ * NAT-instance VPC — `SubnetRouteTableAssociation`, `Route`,
+ * `VPCGatewayAttachment`, `InstanceProfile`. None of them is a thing anyone
+ * deploys FOR itself: each exists to state a relationship between two resources
+ * that are already on the diagram. Drawn as nodes they cost a card plus two
+ * edges to say what one labelled edge says, and they push the resources that
+ * matter apart to make room.
+ *
+ * So the pass removes the join and draws the relationship it encoded:
+ *
+ * - a subnet's route-table association becomes a `Subnet -> RouteTable` edge
+ *   verbed `routes via`;
+ * - a route becomes a `ROUTE` rail on its table plus a `RouteTable -> target`
+ *   edge verbed `routes 0.0.0.0/0`;
+ * - a gateway attachment becomes a `VPC -> gateway` edge verbed `attaches`;
+ * - an instance profile becomes a `PROFILE` rail on its instance.
+ *
+ * Display-time only, exactly like `foldFallbackNodes` and `collapseRouteTables`:
+ * it never writes the canonical stored graph, and the marker it leaves on an
+ * edge (`viaFold`) is unpersisted.
+ *
+ * WHAT IT KEYS ON, and why that is not `attributes`. `foldFallbackNodes` reads
+ * the parent's attribute bag because a dead-letter queue is named INSIDE a
+ * `redrive_policy` blob that no parser turns into an edge. A join resource is
+ * the opposite shape: its whole content is references (`RouteTableId`,
+ * `SubnetId`, `VpcId`, `GatewayId`), and every parser already turns each of
+ * those into a real reference EDGE. Reading the edges therefore covers strictly
+ * more graphs than reading attributes would — the two plan formats that resolve
+ * a reference to an ARN before `attributes` is built, and any graph whose
+ * attribute bags were stripped (every `__layout_qa__` fixture, an anonymised
+ * export) included. `attributes` is still read, for the CIDR and the lines a
+ * rail expands to, but never to decide the fold.
+ *
+ * Which end of the join is the PARENT is decided by resource type — an
+ * association is adjacent to exactly one route table and one subnet — so the
+ * pass never has to guess from attribute key order.
+ */
+
+/** Route target properties, in the precedence order a route resolves them.
+ * Normalized, so the CloudFormation (`GatewayId`), Terraform (`gateway_id`) and
+ * Pulumi (`gatewayId`) spellings all collapse onto one entry. */
+const ROUTE_TARGET_KEYS: readonly string[] = [
+  "gatewayid",
+  "instanceid",
+  "natgatewayid",
+  "transitgatewayid",
+  "vpcpeeringconnectionid",
+  "networkinterfaceid",
+];
+
+/** Destination properties a route's verb and rail name are built from. IPv6 is
+ * listed second so a dual-stack route reads as its IPv4 destination, which is
+ * the one an operator recognises. */
+const ROUTE_DESTINATION_KEYS: readonly string[] = [
+  "destinationcidrblock",
+  "destinationipv6cidrblock",
+  "destinationprefixlistid",
+];
+
+/** Attribute keys an expanded `PROFILE` rail reports, in drawn order. */
+const PROFILE_POLICY_KEYS: readonly string[] = ["roles", "path"];
+
+/**
+ * The four join types, and which treatment each gets. `instanceProfile` is the
+ * one that is not a `NetworkGlueKind`: it mints no edge, so nothing ever
+ * carries a `viaFold` marker for it.
+ */
+type GlueKind = NetworkGlueKind | "instanceProfile";
+
+const GLUE_KIND_BY_TYPE: Partial<Record<ResourceType, GlueKind>> = {
+  [ResourceType.EC2_ROUTE_TABLE_ASSOCIATION]: "routeTableAssociation",
+  [ResourceType.EC2_ROUTE]: "route",
+  [ResourceType.EC2_INTERNET_GATEWAY_ATTACHMENT]: "gatewayAttachment",
+  [ResourceType.IAM_INSTANCE_PROFILE]: "instanceProfile",
+};
+
+/**
+ * The same four joins, keyed off the RAW provider type string.
+ *
+ * Every one of these mapped to `ResourceType.UNKNOWN` until this change, and
+ * `type` is what a stored graph persists — so on the tens of thousands of
+ * graphs already in the table, and on every `__layout_qa__` fixture, the enum
+ * above matches nothing. Reading the raw string as well is what makes the fold
+ * fire on those retroactively instead of waiting for a re-parse, which is the
+ * same trade `foldFallbackNodes` makes when it prefers an attribute walk over
+ * its own parse-time `viaProperty` tag, and the same reason `displayFilter`
+ * keys plumbing off `resourceType` rather than off the enum.
+ *
+ * Consulted only when `type` is `UNKNOWN`: a re-parsed graph is classified, and
+ * a node the classifier gave a real type to must be trusted over a string match.
+ */
+const GLUE_KIND_BY_RESOURCE_TYPE: Readonly<Record<string, GlueKind>> = {
+  "AWS::EC2::SubnetRouteTableAssociation": "routeTableAssociation",
+  aws_route_table_association: "routeTableAssociation",
+  "aws:ec2/routeTableAssociation:RouteTableAssociation": "routeTableAssociation",
+  "AWS::EC2::Route": "route",
+  aws_route: "route",
+  "aws:ec2/route:Route": "route",
+  "AWS::EC2::VPCGatewayAttachment": "gatewayAttachment",
+  aws_internet_gateway_attachment: "gatewayAttachment",
+  "aws:ec2/internetGatewayAttachment:InternetGatewayAttachment": "gatewayAttachment",
+  "AWS::IAM::InstanceProfile": "instanceProfile",
+  aws_iam_instance_profile: "instanceProfile",
+  "aws:iam/instanceProfile:InstanceProfile": "instanceProfile",
+};
+
+/**
+ * Which join `node` is, or `undefined` when it is not one.
+ *
+ * BOTH lookups are own-property guarded, including the one keyed on the enum.
+ * `type` is a plain string on a rehydrated graph — it is cast, never validated
+ * — so a stored node typed `constructor` or `toString` reads a prototype member
+ * back, which is truthy and would be treated as a join whose parent type is
+ * `undefined`, matching any type-less neighbour. Same class as the
+ * prototype-pollution write closed in #1111, and why both go through
+ * `lookupByType`.
+ */
+function glueKindOf(node: ResourceNode): GlueKind | undefined {
+  const byType = lookupByType(GLUE_KIND_BY_TYPE, node.type);
+  if (byType) return byType;
+  if (node.type !== ResourceType.UNKNOWN) return undefined;
+  return lookupByType(GLUE_KIND_BY_RESOURCE_TYPE, node.resourceType);
+}
+
+/** The type of node each kind folds INTO. A join adjacent to no node of its
+ * parent type is left alone — classified, but unfolded. */
+const PARENT_TYPE_BY_KIND: Record<GlueKind, ResourceType> = {
+  routeTableAssociation: ResourceType.EC2_ROUTE_TABLE,
+  route: ResourceType.EC2_ROUTE_TABLE,
+  gatewayAttachment: ResourceType.EC2_VPC,
+  instanceProfile: ResourceType.EC2_INSTANCE,
+};
+
+/** Whether an edge participates in the "would folding strand anything?" test.
+ * Containment is excluded for `foldFallbackNodes`' reason: a join's CONTAINS
+ * edge from its stack goes with it, and counting it would block every fold in a
+ * multi-stack graph. */
+function isStructural(edge: ResourceEdge): boolean {
+  return edge.type !== EdgeType.CONTAINS;
+}
+
+/** First attribute value under any of `wanted`, with the key AS THE PARSER
+ * SPELLED IT — a rail line reads `DestinationCidrBlock 0.0.0.0/0` on a
+ * CloudFormation graph and `destination_cidr_block 0.0.0.0/0` on a Terraform
+ * one, which is what an operator greps their own source for. */
+function attributeUnder(
+  attributes: Record<string, unknown>,
+  wanted: readonly string[],
+): { key: string; value: unknown } | undefined {
+  for (const want of wanted) {
+    const found = readAttributeEntry(attributes, want);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/**
+ * An attribute value rendered for a rail line.
+ *
+ * A reference arrives as `{ Ref: "PublicRouteTable" }` (CloudFormation),
+ * `${aws_internet_gateway.igw.id}` (Terraform) or an unknown-output sentinel (a
+ * plan). Printing the raw JSON of any of those is worse than printing nothing,
+ * so a non-scalar is reported through `fallbackName` — the resolved node's own
+ * name, which the edge already established — and dropped when there is none.
+ */
+function railValue(value: unknown, fallbackName?: string): string | undefined {
+  if (typeof value === "string") return value.startsWith("${") ? fallbackName : value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    const parts = value.map((item) => railValue(item, fallbackName)).filter(Boolean);
+    return parts.length > 0 ? parts.join(", ") : fallbackName;
+  }
+  return fallbackName;
+}
+
+/** Key for one ORDERED endpoint pair.
+ *
+ * Node ids come from IaC logical ids and resource addresses, which can contain
+ * almost anything, so the separator is a character that cannot appear in one.
+ * Built with `String.fromCharCode` rather than typed as a literal for the
+ * reason `foldFallbackNodes`' `PATH_SEP` is: a raw NUL byte in a source file
+ * survives every editor and review tool that renders it as nothing, and this
+ * module shipped three of them before a test that split on the separator
+ * noticed. */
+const PAIR_SEP = String.fromCharCode(0);
+
+function orderedPairKey(source: string, target: string): string {
+  return `${source}${PAIR_SEP}${target}`;
+}
+
+/** Every join that resolved to one ordered pair, collapsed to the single edge
+ * they are drawn as. */
+interface MergedEdge {
+  source: string;
+  target: string;
+  verb: string;
+  /** Per-join detail, in fold order — a route's destination. Empty for the
+   * kinds whose verb says everything (`routes via`, `attaches`). */
+  details: string[];
+  via: NetworkGlueKind;
+  /** The first contributing join, which names the minted edge. */
+  glueId: string;
+}
+
+/**
+ * Destinations a merged label spells out before it starts counting.
+ *
+ * A dual-stack table is the common case at 2, and 3 covers one sending a couple
+ * of named prefixes through a single NAT. Past that the label stops being a
+ * label: a transit-gateway table with twenty CIDRs to one attachment would
+ * compose a caption longer than the diagram is wide, and an unreadable caption
+ * on the edge this pass exists to make readable is worse than the parallel
+ * lines it replaced.
+ *
+ * The overflow reads `+N more`, the idiom the card footer already uses for its
+ * property overflow, and every destination is still spelled out in full on the
+ * table's own `ROUTE` rails.
+ */
+const MERGED_DETAIL_LIMIT = 3;
+
+/** One merged pair's drawn caption. */
+function mergedLabel(pair: MergedEdge): string {
+  if (pair.details.length === 0) return pair.verb;
+  if (pair.details.length <= MERGED_DETAIL_LIMIT) {
+    return `${pair.verb} ${pair.details.join(", ")}`;
+  }
+  const shown = pair.details.slice(0, MERGED_DETAIL_LIMIT).join(", ");
+  return `${pair.verb} ${shown} +${pair.details.length - MERGED_DETAIL_LIMIT} more`;
+}
+
+/** One end of a reference edge, seen from the join in the middle of it. */
+interface Neighbour {
+  edge: ResourceEdge;
+  node: ResourceNode;
+}
+
+export interface FoldNetworkGlueOptions {
+  /**
+   * Parents whose joins the viewer has expanded back into nodes. Empty by
+   * default — every eligible parent folds — so a diagram opens rolled up and
+   * the set only ever records a deliberate expansion.
+   */
+  unfoldedParents?: ReadonlySet<string>;
+  /**
+   * Ids that must neither gain a rail nor gain a minted edge. Both callers pass
+   * `routeTargetIds`, for `foldFallbackNodes`' reason plus one of this pass's
+   * own: a chip qualified as a chip by having exactly ONE inbound source, so an
+   * edge minted into one would silently disqualify it after the caller had
+   * already committed to placing it.
+   */
+  skipParents?: ReadonlySet<string>;
+}
+
+/** One fold, resolved but not yet applied. */
+interface Fold {
+  glue: ResourceNode;
+  kind: GlueKind;
+  parent: ResourceNode;
+  rail?: FallbackRail;
+  /** The edge to mint. Absent when the relationship is drawn as a rail only.
+   *
+   * `verb` is the bare relationship and `detail` the part that varies per join
+   * — a route's destination. They are kept apart rather than composed here
+   * because SEVERAL joins can resolve to the same ordered pair (a dual-stack
+   * route table reaches its gateway twice; so does one that sends three CIDRs
+   * through one NAT), and the pair gets ONE edge whose label carries every
+   * destination. Composing at this point would leave the merge no way to say
+   * `routes 0.0.0.0/0, ::/0` without re-parsing its own output. */
+  mint?: { source: string; target: string; verb: string; detail?: string; via: NetworkGlueKind };
+}
+
+export function foldNetworkGlue(graph: ArchGraph, options?: FoldNetworkGlueOptions): ArchGraph {
+  const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
+  // Both directions: a route references its table, where a profile is
+  // referenced BY its instance, and the pass must not care which way the parser
+  // happened to point the reference.
+  const neighbours = new Map<string, Neighbour[]>();
+  const containerIds = new Set<string>();
+  for (const edge of graph.edges) {
+    if (edge.type === EdgeType.CONTAINS) {
+      containerIds.add(edge.source);
+      continue;
+    }
+    const source = nodeById.get(edge.source);
+    const target = nodeById.get(edge.target);
+    if (!source || !target) continue;
+    const from = neighbours.get(edge.source);
+    if (from) from.push({ edge, node: target });
+    else neighbours.set(edge.source, [{ edge, node: target }]);
+    const to = neighbours.get(edge.target);
+    if (to) to.push({ edge, node: source });
+    else neighbours.set(edge.target, [{ edge, node: source }]);
+  }
+
+  const folds: Fold[] = [];
+  const foldedIds = new Set<string>();
+  /** Eligible joins per parent, counted BEFORE `unfoldedParents` is consulted
+   * — see `ResourceNode.networkGlue`. */
+  const glueCounts = new Map<string, number>();
+  for (const node of graph.nodes) {
+    const kind = glueKindOf(node);
+    if (!kind) continue;
+    // A join that somehow contains something is not a join. Folding it would
+    // orphan its children exactly as `foldFallbackNodes` documents.
+    if (containerIds.has(node.id)) continue;
+
+    const structural = (neighbours.get(node.id) ?? []).filter((n) => isStructural(n.edge));
+    const parent = structural.find((n) => n.node.type === PARENT_TYPE_BY_KIND[kind])?.node;
+    // Fold only into a parent that survived filtering. Otherwise the join stays
+    // — classified, so it draws as a real networking card rather than a grey
+    // one, but unfolded, because there is nothing left to fold it onto.
+    if (!parent) continue;
+    // A route table here is an API Gateway's collapsed table, whose box is
+    // entirely header and rows with no strip below to draw a rail in — the same
+    // refusal `foldFallbackNodes` makes.
+    if (parent.routeTable) continue;
+    if (options?.skipParents?.has(parent.id)) continue;
+
+    const others = structural.filter((n) => n.node.id !== parent.id);
+    // Would folding strand anything? A join reaches exactly its parent and, at
+    // most, the one resource on the other end of the relationship. Anything
+    // else — an authored `depends_on`, a second reference — is a claim this
+    // pass has no verb for, so the node survives rather than lose it.
+    if (others.length > 1) continue;
+    const other = others[0]?.node;
+    if (other && options?.skipParents?.has(other.id)) continue;
+
+    const fold = resolveFold(node, kind, parent, other);
+    if (!fold) continue;
+    glueCounts.set(parent.id, (glueCounts.get(parent.id) ?? 0) + 1);
+    // Expanded by the viewer: the join keeps its own card, and the parent still
+    // gets the count so its control can offer to roll the joins back up.
+    if (options?.unfoldedParents?.has(parent.id)) continue;
+    folds.push(fold);
+    foldedIds.add(node.id);
+  }
+
+  if (glueCounts.size === 0) return graph;
+
+  // Rail order on a card: every ROUTE rail in template order, then PROFILE,
+  // then whatever the later passes append. `folds` is already in node order,
+  // and the two kinds are swept separately so a profile declared between two
+  // routes cannot land between their rails.
+  const railsByParent = new Map<string, FallbackRail[]>();
+  for (const kind of ["route", "instanceProfile"] as const) {
+    for (const fold of folds) {
+      if (fold.kind !== kind || !fold.rail) continue;
+      const rails = railsByParent.get(fold.parent.id);
+      if (rails) rails.push(fold.rail);
+      else railsByParent.set(fold.parent.id, [fold.rail]);
+    }
+  }
+
+  const survivingEdges = graph.edges.filter(
+    (e) => !foldedIds.has(e.source) && !foldedIds.has(e.target),
+  );
+  const existingByPair = new Map<string, ResourceEdge>();
+  for (const edge of survivingEdges) {
+    if (edge.type === EdgeType.CONTAINS) continue;
+    existingByPair.set(orderedPairKey(edge.source, edge.target), edge);
+  }
+
+  // ONE edge per ordered pair, however many joins resolved to it. A route table
+  // reaches its gateway once per route — twice on a dual-stack table, three
+  // times when three CIDRs share a NAT — and each of those is a line between
+  // the same two boxes saying the same thing about a different destination.
+  // Drawn as N parallel edges they read as N relationships; merged, the label
+  // carries every destination, and the ROUTE rails still carry the rest.
+  //
+  // The merge has to happen BEFORE the authored-edge branch rather than inside
+  // it, or the rule applies to whichever kind of edge the graph happens to
+  // contain. That was the first version's bug, in both directions: with an
+  // authored `DependsOn` between the pair, every fold overwrote the last one's
+  // label and N-1 destinations vanished silently; without one, the same input
+  // drew N parallel lines.
+  const merged = new Map<string, MergedEdge>();
+  for (const fold of folds) {
+    if (!fold.mint) continue;
+    const { source, target, verb, detail, via } = fold.mint;
+    const key = orderedPairKey(source, target);
+    // The reverse orientation is left exactly as it is. Its verb would read
+    // backwards ("a route table routes via a subnet"), and minting alongside it
+    // is the doubled line this whole block exists to avoid.
+    if (!existingByPair.has(key) && existingByPair.has(orderedPairKey(target, source))) continue;
+    const held = merged.get(key);
+    if (!held) {
+      const details = detail ? [detail] : [];
+      merged.set(key, { source, target, verb, details, via, glueId: fold.glue.id });
+      continue;
+    }
+    // Deduped: two routes spelling the same destination say it once.
+    if (detail && !held.details.includes(detail)) held.details.push(detail);
+  }
+
+  const relabelled = new Map<string, { verb: string; via: NetworkGlueKind }>();
+  const minted: ResourceEdge[] = [];
+  for (const [key, pair] of merged) {
+    const label = mergedLabel(pair);
+    // An authored edge between the same pair is RE-LABELLED rather than
+    // doubled: a `DependsOn` from a subnet to its route table already draws the
+    // line the association would mint.
+    const held = existingByPair.get(key);
+    if (held) {
+      relabelled.set(held.id, { verb: label, via: pair.via });
+      continue;
+    }
+    minted.push({
+      // Derived from the FIRST join that resolved to this pair, so the pass is
+      // idempotent on ids and a re-render cannot mint a second edge for it.
+      id: `fold-${pair.glueId}`,
+      source: pair.source,
+      target: pair.target,
+      type: EdgeType.REFERENCE,
+      label,
+      viaFold: pair.via,
+    });
+  }
+
+  return {
+    ...graph,
+    nodes: graph.nodes
+      .filter((n) => !foldedIds.has(n.id))
+      .map((n) => {
+        const count = glueCounts.get(n.id);
+        if (!count) return n;
+        const rails = railsByParent.get(n.id);
+        // Rails are appended, never replaced: `filterGraphForDisplay` stamps
+        // LOGS rails upstream and `foldFallbackNodes` appends its own
+        // downstream.
+        return rails
+          ? { ...n, networkGlue: count, fallbackRails: [...(n.fallbackRails ?? []), ...rails] }
+          : { ...n, networkGlue: count };
+      }),
+    edges: [
+      ...survivingEdges.map((e) => {
+        const label = relabelled.get(e.id);
+        return label ? { ...e, label: label.verb, viaFold: label.via } : e;
+      }),
+      ...minted,
+    ],
+  };
+}
+
+/** Build the rail and the minted edge for one resolved join, or `undefined`
+ * when the join carries nothing worth drawing. */
+function resolveFold(
+  glue: ResourceNode,
+  kind: GlueKind,
+  parent: ResourceNode,
+  other: ResourceNode | undefined,
+): Fold | undefined {
+  if (kind === "routeTableAssociation") {
+    // The subnet is the whole content of an association. Without one there is
+    // no relationship to draw, and folding would delete the join outright
+    // rather than compact it.
+    if (other?.type !== ResourceType.EC2_SUBNET) return undefined;
+    return {
+      glue,
+      kind,
+      parent,
+      mint: {
+        source: other.id,
+        target: parent.id,
+        verb: FOLD_VERBS.routeTableAssociation,
+        via: "routeTableAssociation",
+      },
+    };
+  }
+
+  if (kind === "gatewayAttachment") {
+    if (!other) return undefined;
+    return {
+      glue,
+      kind,
+      parent,
+      mint: {
+        source: parent.id,
+        target: other.id,
+        verb: FOLD_VERBS.gatewayAttachment,
+        via: "gatewayAttachment",
+      },
+    };
+  }
+
+  if (kind === "instanceProfile") {
+    // The only reference a profile is allowed to carry besides its instance is
+    // the role it wraps, which the rail then reports. `filterGraphForDisplay`
+    // hides IAM roles, so on the display path there is usually nothing here at
+    // all — the check is what keeps the fold correct on an UNFILTERED graph
+    // (the account export, a browser spec that sets `.graph` directly), where
+    // absorbing some other reference would delete a relationship.
+    if (other && other.type !== ResourceType.IAM_ROLE) return undefined;
+    return { glue, kind, parent, rail: profileRail(glue, other) };
+  }
+
+  const destination = attributeUnder(glue.attributes, ROUTE_DESTINATION_KEYS);
+  const cidr = destination ? railValue(destination.value) : undefined;
+  return {
+    glue,
+    kind,
+    parent,
+    rail: routeRail(glue, destination, cidr, other),
+    // A route whose target is not in the graph still gets its rail; there is
+    // simply nothing to point an edge at.
+    mint: other
+      ? {
+          source: parent.id,
+          target: other.id,
+          // The destination stays SEPARATE from the verb: several routes can
+          // reach one target, and the merge composes `routes 0.0.0.0/0, ::/0`
+          // from the parts rather than re-parsing a composed label.
+          verb: FOLD_VERBS.route,
+          detail: cidr,
+          via: "route",
+        }
+      : undefined,
+  };
+}
+
+/** `ROUTE` rail: `0.0.0.0/0 -> IGW`, expanding to the destination and target
+ * properties as the template spelled them. */
+function routeRail(
+  glue: ResourceNode,
+  destination: { key: string; value: unknown } | undefined,
+  cidr: string | undefined,
+  target: ResourceNode | undefined,
+): FallbackRail {
+  const policy: string[] = [];
+  if (destination && cidr) policy.push(`${destination.key} ${cidr}`);
+  const targetAttribute = attributeUnder(glue.attributes, ROUTE_TARGET_KEYS);
+  if (targetAttribute) {
+    const value = railValue(targetAttribute.value, target?.name);
+    if (value) policy.push(`${targetAttribute.key} ${value}`);
+  }
+  const name = [cidr, target?.name].filter(Boolean).join(" → ");
+  // The join's own name is the last resort — a synthesised logical id, but
+  // still the string a viewer greps their template for.
+  return fallbackRailFor(glue, railLabelFor("route"), policy, name || glue.name);
+}
+
+/** `PROFILE` rail: the profile's name, expanding to the role it carries. */
+function profileRail(glue: ResourceNode, role: ResourceNode | undefined): FallbackRail {
+  const policy: string[] = [];
+  for (const key of PROFILE_POLICY_KEYS) {
+    const found = attributeUnder(glue.attributes, [key]);
+    if (!found) continue;
+    const value = railValue(found.value, role?.name);
+    if (value) policy.push(`${found.key} ${value}`);
+  }
+  return fallbackRailFor(glue, railLabelFor("instanceprofile"), policy);
+}

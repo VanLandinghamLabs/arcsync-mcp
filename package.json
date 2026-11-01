@@ -1,0 +1,47 @@
+{
+  "name": "arcsync-mcp",
+  "version": "0.1.1",
+  "description": "MCP server that gives coding agents ArcSync's architecture graphs, parsed from infrastructure-as-code.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://arcsync.dev/docs/mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VanLandinghamLabs/arcsync-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/VanLandinghamLabs/arcsync-mcp/issues"
+  },
+  "bin": {
+    "arcsync-mcp": "dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "!dist/diagramScore.js",
+    "skills",
+    "!skills/*/evals",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "vite build --config vite.build.config.ts && vite build --config vite.score.config.ts",
+    "prepack": "npm run build",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "check-types": "tsc",
+    "eval:diagrams": "node skills/arcsync-diagrams/evals/run.mjs"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/node": "^26.0.0",
+    "@vitest/coverage-v8": "^5.0.0",
+    "typescript": "^6.0.0",
+    "vite": "^8.0.0",
+    "vitest": "^5.0.0",
+    "zod": "^4.0.0"
+  }
+}

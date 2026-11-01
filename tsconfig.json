@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2024"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "types": ["node"],
+    "noEmit": true,
+    "paths": {
+      "@auto-arch-diagram/core/authoring": ["./vendor/core/src/authoring/index.ts"],
+      "@auto-arch-diagram/core/graphDelta": ["./vendor/core/src/graph/graphDelta.ts"],
+      "@auto-arch-diagram/core/mermaid": ["./vendor/core/src/renderers/mermaid/mermaidRenderer.ts"],
+      "@auto-arch-diagram/core/quotaErrorCodes": ["./vendor/core/src/quotaErrorCodes.ts"],
+      "@auto-arch-diagram/core/types": ["./vendor/core/src/graph/types.ts"]
+    }
+  },
+  "include": ["src", "vendor"]
+}

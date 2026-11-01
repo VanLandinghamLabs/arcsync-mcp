@@ -1,0 +1,53 @@
+{
+  "framing": "Write a design-spec section with an ArcSync architecture diagram for the following system: ",
+  "prompts": [
+    {
+      "id": "video-streaming-aws",
+      "brief": "A Netflix-style video streaming platform on AWS. Uploads from studio partners land in S3, a transcoding pipeline (MediaConvert-style; use the closest icons available) produces HLS renditions, CloudFront serves playback, a catalogue service and recommendation service sit behind an API, viewing events stream through Kinesis into analytics. Include a state machine for a single video's ingest lifecycle (uploaded → validating → transcoding → QC → published, with failure and retry paths, using a `<<choice>>` state). Use at least 3 levels of nesting (e.g. region > service > component)."
+    },
+    {
+      "id": "ecommerce-azure",
+      "brief": "A Shopify-style e-commerce storefront on Azure. Front Door with WAF in front of App Service web frontends, API Management fronting order/catalog/cart microservices on AKS, Cosmos DB for catalog and carts, Azure SQL for orders, Service Bus topics for order events consumed by Functions (inventory, email, fulfilment), Key Vault plus managed identities, all inside a VNet with subnets and NSGs, grouped by resource group. Include a state machine for an order (placed → paid → fulfilled → shipped → delivered, with cancel and refund branches). Exercise edge kinds (`sync`, `async`, `data`, `network`, `iam`) and the `a & b --> c` form."
+    },
+    {
+      "id": "ride-hailing-gcp",
+      "brief": "An Uber-style ride-hailing dispatch system on GCP. Rider and driver mobile apps, a global load balancer with Cloud Armor, services on GKE (trip, dispatch/matching, pricing, location ingest), driver location pings over Pub/Sub into Bigtable, Memorystore geo-index for nearby drivers, Spanner for trips and payments ledger, BigQuery for analytics, an external payment processor and maps provider. Include a state machine for a trip (requested → matching → driver assigned → en route → in progress → completed, with rider cancel, driver cancel / rematch, and no-drivers-found). Write it as a standalone state diagram block that nobody `expands`, plus a second state machine that a node does expand (e.g. driver availability)."
+    },
+    {
+      "id": "payments-aws",
+      "brief": "A Stripe-style payments platform on AWS. Merchant API (API Gateway + Lambda) with idempotency keys in DynamoDB, a Step Functions payment saga (authorize → risk check → capture → ledger write, with compensating void/refund steps), card network and bank connections as external systems, an Aurora double-entry ledger, EventBridge for webhooks to merchants delivered via SQS with retries and a DLQ, KMS for card data tokenization in an isolated PCI VPC with subnets. Two `stateDiagram-v2` blocks: the payment saga (expanded by the Step Functions node) and a webhook delivery state machine (pending → delivering → delivered / retrying with backoff → dead-lettered), expanded by the webhook dispatcher Lambda. Use `state \"Long name\" as X` at least once and Mermaid node shapes."
+    },
+    {
+      "id": "telehealth-azure",
+      "brief": "A remote patient monitoring (telehealth IoT) platform on Azure. Wearable devices and a home gateway, device telemetry into Event Hubs (or IoT Hub — use the closest icon available), stream processing in Functions that detects vital-sign anomalies, Cosmos DB for time-series readings, Azure SQL for patient records, Service Bus for clinical alerts, a clinician web portal on App Service, notification via an external SMS/pager provider, Key Vault, private endpoints in a VNet with NSGs. HIPAA matters: put compliance-relevant facts in props. Include an alert escalation state machine (raised → acknowledged / escalate to on-call after timeout → escalate to physician → resolved / false alarm) expanded by the alerting function."
+    },
+    {
+      "id": "multicloud-chat",
+      "brief": "A Slack-style team chat product that is genuinely multi-cloud. Real-time messaging on AWS (API Gateway WebSockets, Lambda/ECS fan-out, DynamoDB for messages, ElastiCache for presence, S3 + CloudFront for file uploads), analytics and search on GCP (Pub/Sub bridge, BigQuery, a search service on Cloud Run), enterprise SSO through an external IdP, and third-party SaaS integrations (Stripe billing, Twilio/SendGrid notifications, a webhook-based app platform). Make cloud boundaries explicit as top-level subgraphs, and show cross-cloud links with `network` edges."
+    },
+    {
+      "id": "selfhosted-cicd",
+      "brief": "A self-hosted, mostly cloud-agnostic CI/CD and GitOps platform: developers push to GitHub, webhooks trigger self-hosted runners on an on-prem Kubernetes cluster, builds push images to a Harbor registry with Trivy scanning, Argo CD syncs manifests from a config repo into staging and production clusters, HashiCorp Vault issues secrets, Prometheus/Grafana/Alertmanager observe it all, PagerDuty and Slack receive alerts. Almost nothing here has a cloud icon. Include a deployment state machine (queued → building → scanning → awaiting approval → deploying to staging → smoke tests → promoting → deployed, with rollback)."
+    },
+    {
+      "id": "three-tier-neutral",
+      "brief": "A three-tier web application for a regional bank's loan applications, with no cloud provider chosen yet: a browser SPA, a CDN and load balancer, a stateless web tier and an API tier behind it, a relational database with a read replica, a cache, an object store for uploaded documents, a background worker pool fed by a job queue, and an external credit-check API and email provider. Keep it vendor-neutral. Include a state machine for a loan application (draft → submitted → credit check → manual review or auto-approved → approved or declined, with withdrawal at any point before a decision)."
+    },
+    {
+      "id": "event-sourced-orders",
+      "brief": "An event-sourced order management system: a command API validates commands and appends events to an event store, projectors build read models (order summary, customer history, inventory view) in separate stores, a query API serves the read models, a process manager reacts to events to drive payment and shipping through external providers, and snapshot and replay tooling rebuilds projections. Pick a cloud or stay neutral. Include the order aggregate's lifecycle as a standalone `stateDiagram-v2` block that no node expands (created → priced → paid → packed → shipped → delivered, with cancellation and return paths)."
+    },
+    {
+      "id": "data-lake-aws",
+      "brief": "A data lake on AWS: operational databases and SaaS exports land raw files in an S3 landing zone through DMS and AppFlow-style ingestion (use the closest icons available), Glue crawlers and Glue ETL jobs curate the data into raw, cleaned and curated S3 zones in Parquet, the Glue Data Catalog and Lake Formation govern access, Athena and Redshift Spectrum query it, QuickSight dashboards sit on top, and Step Functions orchestrate the nightly pipeline. Include a state machine for a nightly pipeline run (scheduled → ingesting → crawling → transforming → quality checks → published, with retries and failure alerting) expanded by the orchestrator."
+    },
+    {
+      "id": "mobile-firebase-gcp",
+      "brief": "A mobile app backend on Firebase and GCP for a fitness-tracking app: iOS and Android clients using Firebase Authentication, Cloud Firestore for user profiles and workouts, Cloud Storage for progress photos, Cloud Functions triggered by Firestore writes and Storage uploads (thumbnails, achievements, leaderboards), Firebase Cloud Messaging for push notifications, a Cloud Run API for partner integrations, BigQuery export for analytics, and an external wearable-sync provider. Include a state machine for a workout session (planned → in progress ↔ paused → completed → synced, with abandoned)."
+    },
+    {
+      "id": "onprem-kafka",
+      "brief": "An on-premises Kafka streaming platform for a manufacturer: PLC and sensor gateways on the factory floor publish over MQTT to a bridge, a three-broker Kafka cluster with KRaft controllers across two racks, Schema Registry, Kafka Connect workers sinking to a TimescaleDB historian and an S3-compatible object store (MinIO), Kafka Streams apps computing machine health scores, ksqlDB for ad-hoc queries, MirrorMaker 2 replicating to a DR site, and Prometheus/Grafana monitoring. Nothing here has a cloud icon. Include a state machine for a machine's health (healthy → degraded → alarm → maintenance → healthy, with offline)."
+    }
+  ]
+}
