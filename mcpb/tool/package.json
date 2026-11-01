@@ -1,0 +1,8 @@
+{
+  "name": "arcsync-mcp-mcpb-tool",
+  "private": true,
+  "description": "Pins the mcpb CLI that scripts/pack-mcpb.sh installs with npm ci.",
+  "dependencies": {
+    "@anthropic-ai/mcpb": "2.1.2"
+  }
+}

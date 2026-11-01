@@ -20,7 +20,7 @@ ArcSync diagrams are Mermaid `flowchart` and `stateDiagram-v2` syntax inside ```
 
 To change a diagram that was pushed earlier, edit the blocks in the spec (or fetch them with `get_diagram_source` and the `graphId` the push returned), keep the same `%% diagram:` id, validate, and push again.
 
-If the ArcSync tools are not available, still write and check the blocks by hand against this reference, and tell the user that the arcsync-mcp server (https://arcsync.dev/docs/mcp) validates and publishes them.
+If the ArcSync tools are not available, still write and check the blocks by hand against this reference, and tell the user that the arcsync-mcp server validates and publishes them. In Claude Code they add it with `claude mcp add arcsync -- npx -y arcsync-mcp`; other clients and the Claude Desktop extension are covered at https://arcsync.dev/docs/mcp. It holds no credential: the first tool call returns a link that connects their ArcSync account in the browser.
 
 ## A complete example
 

@@ -1,0 +1,120 @@
+{
+  "manifest_version": "0.3",
+  "name": "arcsync-mcp",
+  "display_name": "ArcSync",
+  "version": "0.3.0",
+  "description": "Architecture graphs from Terraform, CDK, CloudFormation, Pulumi and ARM, for coding agents",
+  "long_description": "Gives Claude the architecture graph ArcSync parsed from your infrastructure-as-code: resources and the IAM, network and event relationships between them. Claude can also write, validate and publish its own ArcSync diagrams.\n\nThe first tool call returns a link to connect your ArcSync account in the browser. To use a credential you created in Settings instead, fill in both fields below.",
+  "author": {
+    "name": "VanLandingham Labs",
+    "url": "https://arcsync.dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VanLandinghamLabs/arcsync-mcp"
+  },
+  "homepage": "https://arcsync.dev/docs/mcp",
+  "documentation": "https://arcsync.dev/docs/mcp",
+  "support": "https://github.com/VanLandinghamLabs/arcsync-mcp/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.mjs"
+      ],
+      "env": {
+        "ARCSYNC_CLIENT_ID": "${user_config.client_id}",
+        "ARCSYNC_CLIENT_SECRET": "${user_config.client_secret}"
+      }
+    }
+  },
+  "user_config": {
+    "client_id": {
+      "type": "string",
+      "title": "Client ID (optional)",
+      "description": "Leave empty to connect in the browser. Otherwise, an MCP credential's client ID (arc_…) from arcsync.dev Settings.",
+      "required": false,
+      "default": ""
+    },
+    "client_secret": {
+      "type": "string",
+      "title": "Client secret (optional)",
+      "description": "The secret paired with the client ID (arcsec_…). Leave empty to connect in the browser.",
+      "required": false,
+      "sensitive": true,
+      "default": ""
+    }
+  },
+  "tools": [
+    {
+      "name": "list_diagrams",
+      "description": "List the diagrams in your workspace, filtered by repository, branch or path"
+    },
+    {
+      "name": "get_diagram",
+      "description": "Get one diagram as Mermaid or JSON, with a link to the interactive canvas"
+    },
+    {
+      "name": "describe_resource",
+      "description": "Describe one resource and every relationship in and out of it"
+    },
+    {
+      "name": "get_delta",
+      "description": "Show what a pull request or a re-parse changes in the architecture"
+    },
+    {
+      "name": "list_versions",
+      "description": "List a diagram's saved versions (Pro)"
+    },
+    {
+      "name": "start_parse",
+      "description": "Parse a GitHub repository into a new diagram"
+    },
+    {
+      "name": "get_parse_status",
+      "description": "Report the progress of a parse started with start_parse"
+    },
+    {
+      "name": "validate_diagram",
+      "description": "Check a diagram written in ArcSync syntax, locally"
+    },
+    {
+      "name": "push_diagram",
+      "description": "Store a validated diagram and return its canvas and embed links"
+    },
+    {
+      "name": "get_diagram_source",
+      "description": "Return the source of a pushed diagram, to edit it"
+    },
+    {
+      "name": "list_icons",
+      "description": "List the icon ids a written diagram can use"
+    }
+  ],
+  "keywords": [
+    "architecture",
+    "diagrams",
+    "terraform",
+    "cdk",
+    "cloudformation",
+    "pulumi",
+    "iac"
+  ],
+  "license": "MIT",
+  "privacy_policies": [
+    "https://arcsync.dev/privacy"
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=22"
+    }
+  }
+}

@@ -19,6 +19,10 @@ Add to `.mcp.json` (no credential in it, so it is safe to commit):
 }
 ```
 
+### Claude Desktop
+
+Download `arcsync-mcp-<version>.mcpb` from the latest [release](https://github.com/VanLandinghamLabs/arcsync-mcp/releases/latest) and open it: Claude Desktop installs the extension, with no config file to edit. Leave the two credential fields empty to connect in the browser (below), or fill in both with an MCP credential from Settings.
+
 ### Without Node.js
 
 Each release also ships a standalone binary. On macOS or Linux, Homebrew installs it (on Intel Macs, Homebrew installs the npm package on its own Node.js instead):
@@ -37,15 +41,13 @@ The first tool call returns a link to `https://arcsync.dev/settings/mcp/connect`
 
 For CI or a shared machine, create an MCP credential at https://arcsync.dev/settings instead and pass `ARCSYNC_CLIENT_ID` and `ARCSYNC_CLIENT_SECRET` in the server's environment; they take precedence over a saved credential.
 
-Two agent skills ship in `skills/`: `arcsync-mcp` tells an agent when to call each graph tool, and `arcsync-diagrams` teaches it to write, validate and push its own diagrams. For Claude Code, install both:
+Two agent skills ship in `skills/`: `arcsync-mcp` tells an agent when to call each graph tool, and `arcsync-diagrams` teaches it to write, validate and push its own diagrams. Install both for Claude Code, Codex, Cursor and the other agents the [skills CLI](https://skills.sh) supports:
 
 ```bash
-npm pack arcsync-mcp && tar -xzf arcsync-mcp-*.tgz package/skills
-mkdir -p .claude/skills/arcsync-mcp .claude/skills/arcsync-diagrams
-cp package/skills/arcsync-mcp/SKILL.md .claude/skills/arcsync-mcp/
-cp package/skills/arcsync-diagrams/SKILL.md .claude/skills/arcsync-diagrams/
-rm -rf package arcsync-mcp-*.tgz
+npx skills add VanLandinghamLabs/arcsync-mcp
 ```
+
+The skills do not install the server; add it as above.
 
 Full guide: https://arcsync.dev/docs/mcp
 
