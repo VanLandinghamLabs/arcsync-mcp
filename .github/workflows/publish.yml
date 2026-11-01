@@ -278,7 +278,7 @@ jobs:
   registry:
     needs: publish
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
       id-token: write
@@ -296,9 +296,14 @@ jobs:
           echo "${MCP_PUBLISHER_SHA256}  $RUNNER_TEMP/$ARCHIVE" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/$ARCHIVE" -C "$RUNNER_TEMP" mcp-publisher
       # The registry checks server.json's name against the npm package's
-      # mcpName, so this runs after npm has the version. GitHub OIDC grants the
+      # mcpName, and a just-published version can 404 there for a minute or
+      # two (v0.2.0 did), so publish is retried. GitHub OIDC grants the
       # io.github.VanLandinghamLabs/* namespace.
       - run: |
           set -euo pipefail
           "$RUNNER_TEMP/mcp-publisher" login github-oidc
-          "$RUNNER_TEMP/mcp-publisher" publish
+          for attempt in 1 2 3 4 5 6; do
+            "$RUNNER_TEMP/mcp-publisher" publish && exit 0
+            [ "$attempt" -lt 6 ] && sleep 30
+          done
+          exit 1

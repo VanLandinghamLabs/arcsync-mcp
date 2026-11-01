@@ -1,4 +1,9 @@
-import { authoredHeaderLabel } from "../../graph/authored.js";
+import {
+  AUTHORED_CONTRACT_KEYS,
+  authoredHeaderLabel,
+  isAuthored,
+  stringAttr,
+} from "../../graph/authored.js";
 import { containerChildSets } from "../../graph/containment.js";
 import { foldNetworkGlue } from "../../graph/foldNetworkGlue.js";
 import type { GraphDelta } from "../../graph/graphDelta.js";
@@ -20,6 +25,12 @@ export interface MermaidRenderOptions {
   /** Infra delta to highlight: added and changed nodes get a second class.
    * Removed nodes are not in this graph and are not drawn. */
   delta?: Pick<GraphDelta, "added" | "changed">;
+  /** `arcsync` emits ArcSync diagram syntax: the same structure, with each
+   * node's icon, kind and properties in an `@{ … }` block that `parseArcsync`
+   * reads back, and no classDefs, icon `<img>` tags or delta classes. The
+   * parser types a node by its icon, so types that share an icon (a subnet
+   * and its VPC) come back as the icon's type; `kind` keeps the distinction. */
+  syntax?: "mermaid" | "arcsync";
 }
 
 /** Exported for the infra-delta summary; the renderer's own use is unchanged. */
@@ -206,6 +217,9 @@ const MERMAID_RESERVED_IDS = new Set([
   "_top",
 ]);
 
+/** ArcSync's parser also reads a bare `direction` as its keyword. */
+const ARCSYNC_RESERVED_IDS = new Set([...MERMAID_RESERVED_IDS, "direction"]);
+
 /**
  * Raw node id → Mermaid id, injective over `ids`. Replacing every character
  * outside `[A-Za-z0-9_]` with `_` is lossy (`a-b`, `a.b` and `a_b` all land on
@@ -215,12 +229,15 @@ const MERMAID_RESERVED_IDS = new Set([
  * which the layout harnesses rely on to split Mermaid's `flowchart-<id>-<n>`
  * element ids.
  */
-export function mermaidNodeIds(ids: Iterable<string>): Map<string, string> {
+export function mermaidNodeIds(
+  ids: Iterable<string>,
+  reserved: ReadonlySet<string> = MERMAID_RESERVED_IDS,
+): Map<string, string> {
   const result = new Map<string, string>();
   const taken = new Set<string>();
   const rewritten: string[] = [];
   for (const raw of [...new Set(ids)].sort()) {
-    if (/^[a-zA-Z0-9_]+$/.test(raw) && !MERMAID_RESERVED_IDS.has(raw)) {
+    if (/^[a-zA-Z0-9_]+$/.test(raw) && !reserved.has(raw)) {
       taken.add(raw);
       result.set(raw, raw);
     } else {
@@ -229,7 +246,7 @@ export function mermaidNodeIds(ids: Iterable<string>): Map<string, string> {
   }
   for (const raw of rewritten) {
     const sanitized = raw.replace(/[^a-zA-Z0-9_]/g, "_");
-    const base = MERMAID_RESERVED_IDS.has(sanitized) || !sanitized ? `${sanitized}_` : sanitized;
+    const base = reserved.has(sanitized) || !sanitized ? `${sanitized}_` : sanitized;
     let id = base;
     for (let n = 2; taken.has(id); n += 1) id = `${base}_${n}`;
     taken.add(id);
@@ -295,6 +312,79 @@ function escapeMermaidLabel(text: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/`/g, "&#96;");
+}
+
+const META_KEY = /^[A-Za-z_$][A-Za-z0-9_$-]*$/;
+const MAX_ARCSYNC_PROP_CHARS = 200;
+const NON_PROP_KEYS: ReadonlySet<string> = new Set([...AUTHORED_CONTRACT_KEYS, "link"]);
+
+// parseMeta reads `\n`, `\t`, `\r` but not `\uXXXX`, so JSON.stringify's
+// escapes for other control characters would come back as literal text.
+const metaString = (value: string): string => JSON.stringify(value.replace(/\p{Cc}/gu, " "));
+const metaKey = (key: string): string => (META_KEY.test(key) ? key : metaString(key));
+
+function arcsyncIcon(node: ResourceNode): string | undefined {
+  if (isAuthored(node)) return stringAttr(node, "icon");
+  // Every engine's per-directory grouping is a CLOUDFORMATION_STACK node, so
+  // its CloudFormation icon would mislabel a Terraform or Pulumi stack.
+  if (node.type === ResourceType.CLOUDFORMATION_STACK) return undefined;
+  return iconSubpathForNode(node)
+    ?.replace("/", ":")
+    .replace(/\.svg$/, "");
+}
+
+function arcsyncKind(node: ResourceNode): string | undefined {
+  if (isAuthored(node)) return stringAttr(node, "kind");
+  const known = lookupByType(RESOURCE_DISPLAY_NAMES, node.type);
+  return known && node.type !== ResourceType.UNKNOWN ? known : node.resourceType || known;
+}
+
+function arcsyncProps(node: ResourceNode): string[] {
+  const props: string[] = [];
+  for (const [key, value] of Object.entries(node.attributes ?? {})) {
+    if (NON_PROP_KEYS.has(key)) continue;
+    if ((typeof value === "number" && Number.isFinite(value)) || typeof value === "boolean")
+      props.push(`${metaKey(key)}: ${value}`);
+    else if (typeof value === "string" && value.length <= MAX_ARCSYNC_PROP_CHARS)
+      props.push(`${metaKey(key)}: ${metaString(value)}`);
+  }
+  return props;
+}
+
+/** `["name"]@{ … }`. The bracket label is read up to the next `"` and never
+ * entity-decoded, so a name it cannot carry verbatim also goes in the
+ * metadata `label`, which the parser takes over the bracket. */
+function arcsyncShape(node: ResourceNode): string {
+  const name = node.name.replace(/\p{Cc}/gu, " ");
+  const bracket = name.replace(/"/g, "'");
+  const verbatim = bracket === name && !(name.length >= 2 && /^`.*`$/s.test(name));
+  return `["${bracket}"]${arcsyncMeta(node, verbatim ? undefined : name)}`;
+}
+
+/** An edge label sits between `|` delimiters the parser closes at the first
+ * `|`, quoted or not, and has no metadata fallback, so what it would misread
+ * (a `|`, a `"`, wrapping backticks it strips as Markdown) is swapped. */
+const arcsyncEdgeLabel = (label: string): string =>
+  label
+    .replace(/\p{Cc}/gu, " ")
+    .replace(/"/g, "'")
+    .replace(/\|/g, "¦")
+    .replace(/^`(.*)`$/s, "'$1'");
+
+function arcsyncMeta(node: ResourceNode, label?: string): string {
+  const entries: string[] = [];
+  if (label !== undefined) entries.push(`label: ${metaString(label)}`);
+  const icon = arcsyncIcon(node);
+  if (icon) entries.push(`icon: ${metaString(icon)}`);
+  const kind = arcsyncKind(node);
+  if (kind) entries.push(`kind: ${metaString(kind)}`);
+  for (const key of ["description", "details", "link"]) {
+    const text = stringAttr(node, key);
+    if (text) entries.push(`${key}: ${metaString(text)}`);
+  }
+  const props = arcsyncProps(node);
+  if (props.length > 0) entries.push(`props: { ${props.join(", ")} }`);
+  return entries.length > 0 ? `@{ ${entries.join(", ")} }` : "";
 }
 
 /**
@@ -363,6 +453,8 @@ interface RenderContext {
 }
 
 function nodeLine(node: ResourceNode, indent: string, ctx: RenderContext): string {
+  if (ctx.options?.syntax === "arcsync")
+    return `${indent}${ctx.ids.get(node.id)}${arcsyncShape(node)}`;
   return `${indent}${ctx.ids.get(node.id)}["${formatNodeLabel(node, ctx.options)}"]${getStyleSuffix(node.type)}`;
 }
 
@@ -375,7 +467,11 @@ function renderContainer(
   const parent = ctx.nodeMap.get(parentId);
   if (!parent) return;
 
-  ctx.lines.push(`${indent}subgraph ${ctx.ids.get(parentId)}["${getSubgraphLabel(parent)}"]`);
+  ctx.lines.push(
+    ctx.options?.syntax === "arcsync"
+      ? `${indent}subgraph ${ctx.ids.get(parentId)}${arcsyncShape(parent)}`
+      : `${indent}subgraph ${ctx.ids.get(parentId)}["${getSubgraphLabel(parent)}"]`,
+  );
   for (const childId of childIds) {
     // A child that is itself a container renders as a nested subgraph.
     const grandchildren = ctx.containers.get(childId);
@@ -389,12 +485,13 @@ function renderContainer(
   ctx.lines.push(`${indent}end`);
 }
 
-function edgeLine(edge: ResourceEdge, ids: Map<string, string>): string {
+function edgeLine(edge: ResourceEdge, ids: Map<string, string>, arcsync: boolean): string {
   const source = ids.get(edge.source);
   const target = ids.get(edge.target);
   if (edge.type === EdgeType.EVENT_FLOW) return `  ${source} -.-> ${target}`;
 
-  const label = edge.label ? `|"${escapeMermaidLabel(edge.label)}"|` : "";
+  const text = edge.label && (arcsync ? arcsyncEdgeLabel : escapeMermaidLabel)(edge.label);
+  const label = text ? `|"${text}"|` : "";
   // Best-effort cross-engine matches (literal/ARN, not a real reference in
   // either engine's source) render as a dotted link — the same visual
   // distinction the canvas already makes with a dashed stroke — so an
@@ -417,10 +514,12 @@ export function renderMermaid(graph: ArchGraph, options?: MermaidRenderOptions):
   // and the PR comment get the same reading as the canvas rather than nine grey
   // boxes the canvas no longer shows.
   const transformed = foldNetworkGlue(prepare(graph, { eventFlows: options?.eventFlows }));
+  const arcsync = options?.syntax === "arcsync";
+  const delta = arcsync ? undefined : options?.delta;
   const lines: string[] = [
     graph.metadata?.rankdir === "LR" ? "graph LR" : "graph TD",
-    ...CLASS_DEF_LINES.map((l) => `  ${l}`),
-    ...(options?.delta ? DELTA_CLASS_DEF_LINES.map((l) => `  ${l}`) : []),
+    ...(arcsync ? [] : CLASS_DEF_LINES.map((l) => `  ${l}`)),
+    ...(delta ? DELTA_CLASS_DEF_LINES.map((l) => `  ${l}`) : []),
   ];
 
   // Where each node is DRAWN, resolved the one way the whole codebase resolves
@@ -443,7 +542,7 @@ export function renderMermaid(graph: ArchGraph, options?: MermaidRenderOptions):
   }
 
   const nodeMap = new Map(transformed.nodes.map((n) => [n.id, n]));
-  const ids = mermaidNodeIds(nodeMap.keys());
+  const ids = mermaidNodeIds(nodeMap.keys(), arcsync ? ARCSYNC_RESERVED_IDS : undefined);
   const ctx: RenderContext = { containers, nodeMap, ids, lines, options };
 
   // Render root containers (containers not themselves contained)
@@ -458,12 +557,12 @@ export function renderMermaid(graph: ArchGraph, options?: MermaidRenderOptions):
     lines.push(nodeLine(node, "  ", ctx));
   }
 
-  lines.push(...deltaClassLines(options?.delta, ids));
+  lines.push(...deltaClassLines(delta, ids));
 
   for (const edge of transformed.edges) {
     if (edge.type === EdgeType.CONTAINS) continue;
     if (!nodeMap.has(edge.source) || !nodeMap.has(edge.target)) continue;
-    lines.push(edgeLine(edge, ids));
+    lines.push(edgeLine(edge, ids, arcsync));
   }
 
   return `${lines.join("\n")}\n`;
