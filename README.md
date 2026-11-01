@@ -19,6 +19,20 @@ Add to `.mcp.json` (no credential in it, so it is safe to commit):
 }
 ```
 
+### Without Node.js
+
+Each release also ships a standalone binary. On macOS or Linux, Homebrew installs it (on Intel Macs, Homebrew installs the npm package on its own Node.js instead):
+
+```bash
+brew install vanlandinghamlabs/tap/arcsync-mcp
+```
+
+On Windows, or without Homebrew, download the archive for your platform from [Releases](https://github.com/VanLandinghamLabs/arcsync-mcp/releases) and check it with `gh attestation verify <archive> -R VanLandinghamLabs/arcsync-mcp`. Then use `"command": "arcsync-mcp"` with no `args`, and `arcsync-mcp login` / `logout` in place of the `npx` forms below.
+
+The server is listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.VanLandinghamLabs/arcsync-mcp`.
+
+### Connect
+
 The first tool call returns a link to `https://arcsync.dev/settings/mcp/connect`. Open it, sign in, and click **Connect**: ArcSync mints an MCP credential and hands it to the server over `127.0.0.1`, which saves it to `~/.config/arcsync/mcp-credential.json` (mode 0600) and uses it from the next call. From a terminal, `npx -y arcsync-mcp login` does the same; `npx -y arcsync-mcp logout` deletes the saved file.
 
 For CI or a shared machine, create an MCP credential at https://arcsync.dev/settings instead and pass `ARCSYNC_CLIENT_ID` and `ARCSYNC_CLIENT_SECRET` in the server's environment; they take precedence over a saved credential.
