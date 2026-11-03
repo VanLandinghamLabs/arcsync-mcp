@@ -33,7 +33,8 @@ export const DEFAULT_COLOR: NodeColors = {
  * card is deliberately neutral (see the frontend's `stateThemeColors.ts`).
  */
 export function colorsForType(resourceType: string): NodeColors {
-  if (resourceType === ResourceType.SFN_STATE) return DEFAULT_COLOR;
+  if (resourceType === ResourceType.SFN_STATE || resourceType === ResourceType.DATA_ENTITY)
+    return DEFAULT_COLOR;
   const category = categoryForType(resourceType as ResourceType);
   return category === "generic" ? DEFAULT_COLOR : CATEGORY_COLORS[category];
 }

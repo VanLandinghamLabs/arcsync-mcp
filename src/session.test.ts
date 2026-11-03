@@ -159,6 +159,26 @@ describe("makeSessionClient", () => {
     expect(await store.read()).toBeNull();
   });
 
+  it("warns, and still offers the link, when the rejected credential cannot be re-read or deleted", async () => {
+    const store = memoryStore(STORED);
+    vi.mocked(store.read).mockResolvedValueOnce(STORED).mockRejectedValueOnce(new Error("EIO"));
+    vi.mocked(store.clear).mockRejectedValueOnce("EBUSY");
+    const { startLogin } = fakeLogin();
+    const warn = vi.fn();
+    const api = makeSessionClient({
+      envCredential: null,
+      store,
+      startLogin,
+      makeClient: (c) => clientFor(c, () => new CredentialRejectedError("revoked")),
+      warn,
+    });
+    const err = await api.get("/graphs").catch((e: unknown) => e);
+    expect((err as ApiError).message).toMatch(/rejected the saved credential.*connect\?n=1/s);
+    expect(warn).toHaveBeenCalledWith(
+      "could not delete the rejected credential at /cfg/arcsync/mcp-credential.json (EBUSY)",
+    );
+  });
+
   it("parallel calls with no credential share one listener and one link", async () => {
     const { startLogin } = fakeLogin();
     const api = makeSessionClient({

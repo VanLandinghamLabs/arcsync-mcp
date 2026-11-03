@@ -9,7 +9,7 @@ export interface SourceLine {
 
 export interface SourceBlock {
   index: number;
-  kind: "flow" | "state" | "unknown";
+  kind: "flow" | "state" | "er" | "unknown";
   id: string | undefined;
   title: string | undefined;
   lines: SourceLine[];
@@ -19,6 +19,7 @@ const FENCE_OPEN = /^\s*```+\s*([A-Za-z0-9_-]*)/;
 const FENCE_CLOSE = /^\s*```+\s*$/;
 const FLOW_START = /^(?:flowchart|graph)\b/;
 const STATE_START = /^stateDiagram(?:-v2)?\b/;
+const ER_START = /^erDiagram\b/;
 const ID_COMMENT = /^\s*%%\s*diagram:\s*(\S.*)$/;
 const TITLE_COMMENT = /^\s*%%\s*title:\s*(\S.*)$/;
 const FRONT_MATTER_TITLE = /^title:\s*(\S.*)$/;
@@ -65,7 +66,13 @@ const describeBlock = (
     .slice(bodyStart)
     .find((l) => l.text.trim() !== "" && !l.text.trim().startsWith("%%"));
   const text = head?.text.trim() ?? "";
-  const kind = FLOW_START.test(text) ? "flow" : STATE_START.test(text) ? "state" : "unknown";
+  const kind = FLOW_START.test(text)
+    ? "flow"
+    : STATE_START.test(text)
+      ? "state"
+      : ER_START.test(text)
+        ? "er"
+        : "unknown";
 
   if (kind === "unknown") {
     diags.add({
@@ -73,7 +80,7 @@ const describeBlock = (
       block: id ?? `block-${index + 1}`,
       line: head?.line ?? openLine,
       column: head ? head.text.length - head.text.trimStart().length + 1 : 1,
-      message: "a block must start with flowchart, graph or stateDiagram-v2",
+      message: "a block must start with flowchart, graph, stateDiagram-v2 or erDiagram",
     });
   }
   return { index, kind, id, title, lines };

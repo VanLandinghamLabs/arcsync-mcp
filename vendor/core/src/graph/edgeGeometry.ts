@@ -300,7 +300,7 @@ const BORDER_SLOP = 2;
 // A correctly-routed endpoint sits on its node's rectangle border. A
 // half-diagonal radius is not enough: on a wide, short node it admits points
 // well above or below the box, and every point buried inside it.
-function onBorder(p: Point, center: Point, dims: NodeDims): boolean {
+export function onBorder(p: Point, center: Point, dims: NodeDims): boolean {
   const dx = Math.abs(p.x - center.x) - dims.width / 2;
   const dy = Math.abs(p.y - center.y) - dims.height / 2;
   return Math.max(dx, dy) >= -BORDER_SLOP && dx <= BORDER_SLOP && dy <= BORDER_SLOP;

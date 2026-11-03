@@ -150,8 +150,13 @@ describe("makeApiClient", () => {
       "GET /graphs/g1": () => json(404, { error: "Graph not found" }),
       "GET /graphs/g2": () => new Response("upstream timeout", { status: 504 }),
       "GET /graphs/g3": () => json(500, undefined),
+      "GET /graphs/g4": () => json(429, { message: "Too Many Requests" }),
     });
     const api = makeApiClient(config, fn, () => 0);
+    await expect(api.get("/graphs/g4")).rejects.toMatchObject({
+      status: 429,
+      message: "Too Many Requests",
+    });
     await expect(api.get("/graphs/g1")).rejects.toMatchObject({
       status: 404,
       message: "Graph not found",

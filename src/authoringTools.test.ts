@@ -131,6 +131,12 @@ describe("push_diagram", () => {
     expect(text).not.toContain("Paste the embed link");
   });
 
+  it("ends the embed line cleanly when there is neither an embed nor a share note", async () => {
+    const { ctx } = stub({ post: () => ({ ...pushed, embedUrl: null }) });
+    const text = await pushDiagram.run(ctx, { source: fixture("checkout.md") });
+    expect(text.split("\n")).toContain("Embed: not available.");
+  });
+
   it("includes returned warnings", async () => {
     const { ctx } = stub({
       post: () => ({

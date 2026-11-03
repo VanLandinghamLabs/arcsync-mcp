@@ -1,3 +1,4 @@
+import { DATA_MODEL_ATTRIBUTE, type DataModel } from "../graph/dataModel.js";
 import {
   type ArchGraph,
   EdgeType,
@@ -7,6 +8,7 @@ import {
   ResourceType,
 } from "../graph/types.js";
 import { createDiagnostics, type Diagnostic } from "./diagnostics.js";
+import { parseErDiagram } from "./erDiagram.js";
 import {
   type EdgeKind,
   edgeBudget,
@@ -33,7 +35,7 @@ export type DiagramIdSource = "pinned" | "title" | "none";
 export interface ParseResult {
   graph: ArchGraph;
   diagnostics: Diagnostic[];
-  blocks: { id: string; kind: "flow" | "state"; title?: string }[];
+  blocks: { id: string; kind: "flow" | "state" | "er"; title?: string }[];
   title: string;
   diagramId: string | undefined;
   diagramIdSource: DiagramIdSource;
@@ -127,6 +129,8 @@ export const parseArcsync = (source: string): ParseResult => {
   const flows: FlowBlock[] = [];
   const states = new Map<string, StateAst>();
   const stateTitles = new Map<string, string | undefined>();
+  const models = new Map<string, DataModel>();
+  const modelTitles = new Map<string, string | undefined>();
   const kept: ParseResult["blocks"] = [];
   for (const block of split) {
     if (block.kind === "unknown") continue;
@@ -140,7 +144,10 @@ export const parseArcsync = (source: string): ParseResult => {
     kept.push({ id, kind: block.kind, ...(block.title !== undefined && { title: block.title }) });
     if (block.kind === "flow")
       flows.push({ id, title: block.title, ast: parseFlowchart(block, diags, flowBudget) });
-    else {
+    else if (block.kind === "er") {
+      models.set(id, parseErDiagram(block, diags));
+      modelTitles.set(id, block.title);
+    } else {
       states.set(id, parseStateDiagram(block, diags, stateLimits));
       stateTitles.set(id, block.title);
     }
@@ -218,13 +225,17 @@ export const parseArcsync = (source: string): ParseResult => {
 
     if (expands !== undefined) {
       const ast = typeof expands === "string" ? states.get(expands) : undefined;
+      const model = typeof expands === "string" ? models.get(expands) : undefined;
       if (typeof expands !== "string")
-        report("error", flow.id, fn.line, "expands must name a state diagram block");
-      else if (ast) {
+        report("error", flow.id, fn.line, "expands must name a state or ER diagram block");
+      else if (model) {
+        attributes[DATA_MODEL_ATTRIBUTE] = model;
+        expanded.add(expands);
+      } else if (ast) {
         attributes.Definition = definitionOf(expands, ast);
         expanded.add(expands);
       } else if (seen.has(expands))
-        report("error", flow.id, fn.line, `'${expands}' is not a state diagram block`);
+        report("error", flow.id, fn.line, `'${expands}' is not a state or ER diagram block`);
       else report("error", flow.id, fn.line, `no block named '${expands}'`);
     }
 
@@ -298,6 +309,22 @@ export const parseArcsync = (source: string): ParseResult => {
         icon: "service",
         kind: "state machine",
         Definition: definitionOf(id, ast),
+      }),
+    );
+  }
+
+  for (const [id, model] of models) {
+    if (expanded.has(id)) continue;
+    if (nodes.has(id)) {
+      report("error", id, 1, `'${id}' is both a node and an ER diagram block`);
+      continue;
+    }
+    nodes.set(
+      id,
+      authoredNode(id, clamp(modelTitles.get(id) ?? id, "container name", id, 1), {
+        icon: "database",
+        kind: "data model",
+        [DATA_MODEL_ATTRIBUTE]: model,
       }),
     );
   }

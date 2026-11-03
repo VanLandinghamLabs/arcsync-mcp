@@ -63,6 +63,7 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.APPSYNC_API]: "compute",
   [ResourceType.SFN_STATE_MACHINE]: "compute",
   [ResourceType.SFN_STATE]: "compute",
+  [ResourceType.DATA_ENTITY]: "storage",
 
   // Storage (green)
   [ResourceType.S3_BUCKET]: "storage",

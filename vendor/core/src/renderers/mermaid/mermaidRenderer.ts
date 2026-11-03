@@ -82,6 +82,7 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.EKS_CLUSTER]: "EKS Cluster",
   [ResourceType.SFN_STATE_MACHINE]: "Step Functions",
   [ResourceType.SFN_STATE]: "State",
+  [ResourceType.DATA_ENTITY]: "Entity",
   [ResourceType.AUTOSCALING_GROUP]: "Auto Scaling Group",
   [ResourceType.RDS_CLUSTER]: "Aurora Cluster",
   [ResourceType.ELASTICACHE_CLUSTER]: "ElastiCache",

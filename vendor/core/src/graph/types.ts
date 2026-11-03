@@ -64,6 +64,9 @@ export enum ResourceType {
   /** A single ASL state inside a state machine. Synthesised by
    * `expandStateMachines` at display time — never parsed, never persisted. */
   SFN_STATE = "aws_sfn_state",
+  /** One entity of a data store's model (an ER diagram card). Synthesised by
+   * `expandStateMachines` at display time — never parsed, never persisted. */
+  DATA_ENTITY = "data_entity",
 
   // Auto Scaling
   AUTOSCALING_GROUP = "aws_autoscaling_group",
@@ -633,6 +636,11 @@ export interface GraphMetadata {
   rankdir?: GraphRankdir;
   /** Set on a graph built from ArcSync diagram syntax rather than parsed IaC. */
   authored?: true;
+  /**
+   * Set once data stores' models were attached (`attachAppSchemas`). A graph
+   * parsed before that lacks it, so the canvas attaches DynamoDB models itself.
+   */
+  dataModels?: true;
 }
 
 export const GRAPH_RANKDIRS = ["TB", "LR"] as const;
