@@ -218,11 +218,18 @@ end
 `;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  const [command, version, sumsPath] = process.argv.slice(2);
+export function cli(
+  [command, version, sumsPath],
+  { write = (text) => process.stdout.write(text), error = console.error } = {},
+) {
   if (command !== "formula" || !version || !sumsPath) {
-    console.error("usage: node scripts/release-assets.mjs formula <version> <SHA256SUMS>");
-    process.exit(1);
+    error("usage: node scripts/release-assets.mjs formula <version> <SHA256SUMS>");
+    return 1;
   }
-  process.stdout.write(homebrewFormula(version, parseSums(readFileSync(sumsPath, "utf8"))));
+  write(homebrewFormula(version, parseSums(readFileSync(sumsPath, "utf8"))));
+  return 0;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  process.exitCode = cli(process.argv.slice(2));
 }

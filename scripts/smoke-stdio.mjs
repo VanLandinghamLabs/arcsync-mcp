@@ -82,20 +82,27 @@ export function smoke(command, args = [], { timeoutMs = 30_000 } = {}) {
   });
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  const [command, ...args] = process.argv.slice(2);
+export async function cli(
+  [command, ...args],
+  { run = smoke, log = console.log, error = console.error } = {},
+) {
   if (!command) {
-    console.error("usage: node scripts/smoke-stdio.mjs <command> [args...]");
-    process.exit(1);
+    error("usage: node scripts/smoke-stdio.mjs <command> [args...]");
+    return 1;
   }
   // A relative path to a binary resolves against the cwd, which Windows
   // CreateProcess does not do for a path with forward slashes.
   const isPath = /[\\/]/.test(command);
-  smoke(isPath ? resolve(command) : command, args).then(
-    (names) => console.log(`ok: ${names.length} tools (${names.join(", ")})`),
-    (err) => {
-      console.error(`smoke test failed: ${err.message}`);
-      process.exit(1);
-    },
-  );
+  try {
+    const names = await run(isPath ? resolve(command) : command, args);
+    log(`ok: ${names.length} tools (${names.join(", ")})`);
+    return 0;
+  } catch (err) {
+    error(`smoke test failed: ${err.message}`);
+    return 1;
+  }
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  process.exitCode = await cli(process.argv.slice(2));
 }
