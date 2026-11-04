@@ -5,7 +5,7 @@ description: Use when writing an architecture diagram or a state machine for a d
 
 # Writing ArcSync diagrams
 
-ArcSync diagrams are Mermaid `flowchart` and `stateDiagram-v2` syntax inside ```` ```arcsync ```` fences, plus `@{ … }` metadata on nodes and edges: icons, descriptions, facts, and links from a node to the state machine it runs. ArcSync draws them as an interactive canvas that readers can zoom into and embed in Notion.
+ArcSync diagrams are Mermaid `flowchart`, `stateDiagram-v2` and `erDiagram` syntax inside ```` ```arcsync ```` fences, plus `@{ … }` metadata on nodes and edges: icons, descriptions, facts, and links from a node to the state machine it runs. ArcSync draws them as an interactive canvas that readers can zoom into and embed in Notion.
 
 **When to use it:** an architecture or state diagram in a spec that people will read and share. For a throwaway sketch, a sequence diagram, or a chart, use plain Mermaid.
 
@@ -20,7 +20,7 @@ ArcSync diagrams are Mermaid `flowchart` and `stateDiagram-v2` syntax inside ```
 
 To change a diagram that was pushed earlier, edit the blocks in the spec (or fetch them with `get_diagram_source` and the `graphId` the push returned), keep the same `%% diagram:` id, validate, and push again.
 
-If the ArcSync tools are not available, still write and check the blocks by hand against this reference, and tell the user that the arcsync-mcp server validates and publishes them. In Claude Code they add it with `claude mcp add arcsync -- npx -y arcsync-mcp`; other clients and the Claude Desktop extension are covered at https://arcsync.dev/docs/mcp. It holds no credential: the first tool call returns a link that connects their ArcSync account in the browser.
+If the ArcSync tools are not available, still write and check the blocks by hand against this reference, and tell the user that the arcsync-mcp server validates and publishes them. In Claude Code they add it with `claude mcp add arcsync -- npx -y arcsync-mcp`; other clients and the Claude Desktop extension are covered at https://arcsync.dev/docs/mcp. It holds no credential: the first tool call that reaches ArcSync returns a link that connects their ArcSync account in the browser. `validate_diagram` and `list_icons` work without connecting.
 
 ## A complete example
 
@@ -74,17 +74,19 @@ stateDiagram-v2
 
 ### Blocks, ids and titles
 
-- Each block starts with `flowchart LR` / `flowchart TB` (also `graph`, `TD`; `RL` is drawn as LR and `BT` as TB) or `stateDiagram-v2`.
-- `%% diagram: <id>` names a block. `expands:` refers to state blocks by this name. Ids are lowercase letters, digits and hyphens, at most 64 characters.
+- Each block starts with `flowchart LR` / `flowchart TB` (also `graph`, `TD`; `RL` is drawn as LR and `BT` as TB), `stateDiagram-v2`, or `erDiagram`.
+- `%% diagram: <id>` names a block. `expands:` refers to state or ER blocks by this name. Ids are lowercase letters, digits and hyphens, at most 64 characters.
 - `%% title: <text>` gives a block a title. Other `%%` lines are comments.
 - **One push is one diagram**, however many blocks it holds: an architecture block plus the state machines its nodes expand is a single diagram with one link.
 - Several `flowchart` blocks in one push each become a container titled by the block's title. A node id used in two blocks is the same node.
 
 ### Diagram ids
 
-`push_diagram` picks the diagram id from the `diagramId` argument, else the `%% diagram:` id of the **first** block, else a slug of the first title, and then warns that the id comes from the title. With no id and no title that gives a slug (no title at all, or one with no ASCII letters or digits), nothing is pushed: add `%% diagram: <id>` or pass `diagramId`. Pushing the same id again updates that diagram. **Always put `%% diagram: <id>` in the first block.** Without it, retitling the diagram changes its id and the next push creates a separate diagram instead of updating the old one.
+`push_diagram` picks the diagram id from the `diagramId` argument, else the `%% diagram:` id of the **first** block, else a slug of the first title (with no title anywhere, of the first `%% diagram:` id in any block), and then warns that the id comes from the title. If that gives no slug, nothing is pushed: add `%% diagram: <id>` or pass `diagramId`. Pushing the same id again updates that diagram. **Always put `%% diagram: <id>` in the first block.** Without it, retitling the diagram changes its id and the next push creates a separate diagram instead of updating the old one.
 
 ### Nodes
+
+Every node is drawn as a card. Brackets set the label; the bracket shape is accepted for Mermaid compatibility and changes nothing on the canvas.
 
 ```
 id                          plain node, label = id
@@ -101,7 +103,7 @@ id["Label with [brackets] or |pipes|"]
 - Ids: letters, digits, `_`, `-` and `.`. `end` and `subgraph` cannot be ids (use `endpoint`, `finish`).
 - Quote a label that contains `]`, `)`, `|` or `@{`. A quoted label cannot contain `"`, and HTML entities such as `#quot;` are shown literally.
 - **A node used in an edge without being defined is created implicitly** (validate reports it as `info`). It has no icon or description, so define every node you mean to show.
-- A node belongs to the subgraph where it is first mentioned. Define each node inside its subgraph and write the edges after the subgraphs, so an edge never pulls a node into the wrong container.
+- A node belongs to the first subgraph that mentions it, even when an earlier edge mentioned it outside any subgraph. Define each node inside its subgraph and write the edges after the subgraphs, so an edge never pulls a node into the wrong container.
 
 ### Node metadata `@{ … }`
 
@@ -127,12 +129,12 @@ fn[Checkout handler]@{
 | `details` | A longer explanation, shown in the side panel. |
 | `props` | Facts a reviewer checks: runtime, sizes, retention, SLAs, protocols, compliance scope. Listed in the side panel. |
 | `link` | An `http(s)` URL; other schemes are dropped. `click id "https://…"` does the same. |
-| `expands` | The `%% diagram:` id of a state block; opening the node shows that state machine. |
-| `label`, `shape` | Alternative to the bracket syntax. |
+| `expands` | The `%% diagram:` id of a state or ER block; opening the node shows that state machine or data model. |
+| `label` | Alternative to the bracket syntax. |
 
 - A node can carry `props`, `description`, `details` and `expands` all at once.
 - The syntax is relaxed JSON: unquoted keys, `"` or `'` strings, numbers, `true`/`false`/`null`, arrays, nested objects, trailing commas, and one key per line for long metadata. A bare word is read as a string, but quote string values anyway. A string cannot span lines.
-- Do not put `icon`, `kind`, `link`, `description`, `details` or `expands` inside `props`: they are ignored there (validate warns).
+- Do not put `icon`, `kind`, `link`, `description` or `details` inside `props`: they are ignored there (validate warns). `expands` inside `props` is kept as a plain fact, opens nothing, and gets no warning.
 
 ### Containers
 

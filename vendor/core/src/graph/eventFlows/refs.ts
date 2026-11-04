@@ -4,14 +4,26 @@
  * interpolations both show up in AWS, GCP and Azure graphs.
  */
 
-/** Resolve a CFN intrinsic ({Ref: X} / {Fn::GetAtt: [X, ...]}) to a logical id. */
+/**
+ * The logical id a `Fn::GetAtt` value names: `["Role", "Arn"]`, or the long-form
+ * scalar `Fn::GetAtt: Role.Arn`, which only the `!GetAtt` tag splits for us.
+ */
+export function getAttLogicalId(getAtt: unknown): string | undefined {
+  const target =
+    typeof getAtt === "string"
+      ? getAtt.split(".")[0]
+      : Array.isArray(getAtt)
+        ? getAtt[0]
+        : undefined;
+  return typeof target === "string" ? target : undefined;
+}
+
+/** Resolve a CFN intrinsic ({Ref: X} / {Fn::GetAtt: [X, ...] or "X.Attr"}) to a logical id. */
 export function resolveCfnRef(value: unknown): string | null {
   if (value == null || typeof value !== "object") return null;
   const obj = value as Record<string, unknown>;
   if (typeof obj.Ref === "string") return obj.Ref;
-  const getAtt = obj["Fn::GetAtt"];
-  if (Array.isArray(getAtt) && typeof getAtt[0] === "string") return getAtt[0];
-  return null;
+  return getAttLogicalId(obj["Fn::GetAtt"]) ?? null;
 }
 
 /**

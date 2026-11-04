@@ -37,7 +37,7 @@ The server is listed in the [MCP Registry](https://registry.modelcontextprotocol
 
 ### Connect
 
-The first tool call returns a link to `https://arcsync.dev/settings/mcp/connect`. Open it, sign in, and click **Connect**: ArcSync mints an MCP credential and hands it to the server over `127.0.0.1`, which saves it to `~/.config/arcsync/mcp-credential.json` (mode 0600) and uses it from the next call. From a terminal, `npx -y arcsync-mcp login` does the same; `npx -y arcsync-mcp logout` deletes the saved file.
+The first tool call that reaches ArcSync returns a link to `https://arcsync.dev/settings/mcp/connect`. `validate_diagram` and `list_icons` work without connecting. Open it, sign in, and click **Connect**: ArcSync mints an MCP credential and hands it to the server over `127.0.0.1`, which saves it to `~/.config/arcsync/mcp-credential.json` (mode 0600) and uses it from the next call. From a terminal, `npx -y arcsync-mcp login` does the same; `npx -y arcsync-mcp logout` deletes the saved file.
 
 For CI or a shared machine, create an MCP credential at https://arcsync.dev/settings instead and pass `ARCSYNC_CLIENT_ID` and `ARCSYNC_CLIENT_SECRET` in the server's environment; they take precedence over a saved credential.
 
