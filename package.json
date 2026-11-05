@@ -1,6 +1,6 @@
 {
   "name": "arcsync-mcp",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "MCP server that gives coding agents ArcSync's architecture graphs, parsed from infrastructure-as-code.",
   "mcpName": "io.github.VanLandinghamLabs/arcsync-mcp",
   "type": "module",

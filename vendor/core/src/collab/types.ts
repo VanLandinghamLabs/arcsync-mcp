@@ -94,6 +94,19 @@ export interface WsResyncFrame {
 }
 
 /**
+ * One slice of a `sync` frame too large for a single @connections post. `data`
+ * is a slice of that frame's JSON text; the parts sharing a `syncId` join into
+ * it. A client that predates this ignores the unknown type.
+ */
+export interface WsSyncPartFrame {
+  type: "sync-part";
+  syncId: string;
+  index: number;
+  total: number;
+  data: string;
+}
+
+/**
  * The `code` field of the collaboration WebSocket's `error` frame — the wire
  * contract between `ws-default/handler.ts` (which posts it) and
  * `collaboration.ts` (which reads it). It lives here so renaming a code

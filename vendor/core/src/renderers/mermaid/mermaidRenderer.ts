@@ -17,7 +17,7 @@ import { EdgeType, ResourceType } from "../../graph/types.js";
 import { iconSubpathForNode } from "../../icons/iconAssets.js";
 
 export interface MermaidRenderOptions {
-  /** When set, embeds <img> icon tags in node labels (requires securityLevel: 'loose').
+  /** When set, embeds <img> icon tags in node labels (needs Mermaid's HTML labels).
    * The root the `aws/`, `gcp/` and `azure/` icon directories sit under. */
   iconBaseUrl?: string;
   /** Extract event-type nodes from IaC event semantics. Default true. */
@@ -297,14 +297,23 @@ function getStyleSuffix(type: ResourceType): string {
 }
 
 /**
- * HTML-entity-encode text destined for a quoted Mermaid label (node
- * `["..."]`, subgraph, or edge `|"..."|`). Names come from arbitrary user
- * IaC (event detail-types, SNS filter values, resource/stack/integration
- * names) and the frontend renders Mermaid with
- * securityLevel "loose", so an unescaped `"` breaks out of the label quotes
- * and `<`/`>` are an HTML-injection vector (e.g. `<img onerror=...>`).
- * Mermaid accepts entities inside quoted labels, so this is safe to apply
- * unconditionally.
+ * Neutralise text destined for a quoted Mermaid label (node `["..."]`,
+ * subgraph, or edge `|"..."|`). Names come from arbitrary user IaC (event
+ * detail-types, SNS filter values, resource/stack/integration names) and the
+ * frontend renders Mermaid with HTML labels, so an unescaped `"` breaks out of
+ * the label quotes and `<`/`>` are an HTML-injection vector (e.g.
+ * `<img onerror=...>`). Mermaid accepts entities inside quoted labels, so this
+ * is safe to apply unconditionally.
+ *
+ * Mermaid strips directives from the whole source before it lexes anything, so
+ * quotes do not protect a `%%{`: unclosed it eats the rest of the diagram, and
+ * closed it is a config directive. A lone `%` stays as written, keeping ordinary
+ * labels readable in the source.
+ *
+ * No `#` may reach Mermaid, so these entities stay named. Its `#\w+;` handling
+ * reads `#12;` as an entity and turns `&#96;` into a stray `&`, and its
+ * `style.*:\S*#.*;` rewrite, which the icon tag's `style` attribute triggers,
+ * drops the last `;` of any line with a `#` in it, breaking the entity it ends.
  */
 function escapeMermaidLabel(text: string): string {
   return text
@@ -312,7 +321,9 @@ function escapeMermaidLabel(text: string): string {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/`/g, "&#96;");
+    .replace(/#/g, "&num;")
+    .replace(/`/g, "&grave;")
+    .replace(/%(?=%)/g, "&percnt;");
 }
 
 const META_KEY = /^[A-Za-z_$][A-Za-z0-9_$-]*$/;
@@ -489,21 +500,19 @@ function renderContainer(
 function edgeLine(edge: ResourceEdge, ids: Map<string, string>, arcsync: boolean): string {
   const source = ids.get(edge.source);
   const target = ids.get(edge.target);
-  if (edge.type === EdgeType.EVENT_FLOW) return `  ${source} -.-> ${target}`;
-
   const text = edge.label && (arcsync ? arcsyncEdgeLabel : escapeMermaidLabel)(edge.label);
   const label = text ? `|"${text}"|` : "";
-  // Best-effort cross-engine matches (literal/ARN, not a real reference in
-  // either engine's source) render as a dotted link — the same visual
-  // distinction the canvas already makes with a dashed stroke — so an
-  // exported Mermaid artifact never presents a guess as a parsed fact.
-  if (edge.inferredCrossEngine) return `  ${source} -.->${label} ${target}`;
+  // Async edges are dotted, as are best-effort cross-engine matches (literal/ARN,
+  // not a real reference in either engine's source): the same visual distinction
+  // the canvas makes with a dashed stroke, so an exported Mermaid artifact never
+  // presents a guess as a parsed fact.
+  const shaft = edge.type === EdgeType.EVENT_FLOW || edge.inferredCrossEngine ? "-.-" : "--";
 
   // Mermaid's flowchart grammar has no one-sided `<--` link, so a reverse
   // edge swaps its endpoints and draws a forward arrow.
-  if (edge.direction === "reverse") return `  ${target} -->${label} ${source}`;
-  const arrow = edge.direction === "bidirectional" ? "<-->" : "-->";
-  return `  ${source} ${arrow}${label} ${target}`;
+  if (edge.direction === "reverse") return `  ${target} ${shaft}>${label} ${source}`;
+  const tail = edge.direction === "bidirectional" ? "<" : "";
+  return `  ${source} ${tail}${shaft}>${label} ${target}`;
 }
 
 export function renderMermaid(graph: ArchGraph, options?: MermaidRenderOptions): string {

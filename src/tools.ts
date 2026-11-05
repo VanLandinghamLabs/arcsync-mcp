@@ -49,7 +49,14 @@ const graphId = graphIdSchema("a graphId as list_diagrams returns it").describe(
 type Row = Record<string, unknown>;
 
 const MAX_LIST_PAGES = 10;
-const MAX_MERMAID_CHARS = 60_000;
+const MAX_OUTPUT_CHARS = 60_000;
+
+const boundedJson = (value: unknown, canvas: string) => {
+  const text = asJson(value);
+  return text.length > MAX_OUTPUT_CHARS
+    ? `${text.slice(0, MAX_OUTPUT_CHARS)}\n…truncated: ${text.length} characters in full. Call describe_resource for one resource, or open the canvas: ${canvas}`
+    : text;
+};
 
 const listDiagrams = defineTool({
   name: "list_diagrams",
@@ -115,12 +122,14 @@ const getDiagram = defineTool({
         note: "This diagram has no graph data yet. If a parse is running, poll get_parse_status.",
       });
     }
-    if (format === "json") return asJson({ ...header, ...graphAsJson(graph) });
+    if (format === "json") {
+      return boundedJson({ ...header, ...graphAsJson(graph) }, canvasUrl(appUrl, diagramId));
+    }
 
     const mermaid = renderMermaid(graph);
     const clipped =
-      mermaid.length > MAX_MERMAID_CHARS
-        ? `${mermaid.slice(0, MAX_MERMAID_CHARS)}\n%% truncated: ${mermaid.length} characters in full; open the canvas for the whole diagram`
+      mermaid.length > MAX_OUTPUT_CHARS
+        ? `${mermaid.slice(0, MAX_OUTPUT_CHARS)}\n%% truncated: ${mermaid.length} characters in full; open the canvas for the whole diagram`
         : mermaid;
     return [
       `# ${header.title}`,
@@ -261,7 +270,10 @@ const getDelta = defineTool({
   async run({ api, appUrl }, { graphId: id, version, against = "previous" }) {
     if (!version) {
       const raw = await api.get<Row>(`/graphs/${enc(id)}`);
-      return asJson(describeEnvelope(raw.delta as DeltaEnvelope | undefined, appUrl, id));
+      return boundedJson(
+        describeEnvelope(raw.delta as DeltaEnvelope | undefined, appUrl, id),
+        `${canvasUrl(appUrl, id)}?delta=1`,
+      );
     }
     const diff = await api.get<Row>(
       `/graphs/${enc(id)}/history/${enc(version)}/diff?against=${against}`,
@@ -269,7 +281,7 @@ const getDelta = defineTool({
     if (diff.isInitial)
       return "This is the diagram's first saved version; there is nothing earlier to compare.";
     if (diff.isLiveUnavailable) return "The latest parse has no graph data to compare against.";
-    return asJson(
+    return boundedJson(
       compact({
         base: diff.base,
         head: diff.head,
@@ -277,6 +289,7 @@ const getDelta = defineTool({
         resources: diff.nodes,
         relationships: diff.edges,
       }),
+      canvasUrl(appUrl, id),
     );
   },
 });

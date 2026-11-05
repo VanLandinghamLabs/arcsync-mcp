@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
@@ -62,7 +63,28 @@ const canon = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
+const manyNodes = () =>
+  Array.from({ length: 2000 }, (_, i) => ({
+    id: `aws_lambda_function.r${i}`,
+    type: "lambda",
+    name: `r${i}`,
+    resourceType: "aws_lambda_function",
+  }));
+
+function expectTruncated(text: string, canvas: string) {
+  const [body, note] = text.split("\n…truncated: ");
+  expect(body).toHaveLength(60_000);
+  expect(note).toMatch(/^\d+ characters in full\. Call describe_resource/);
+  expect(note.endsWith(`open the canvas: ${canvas}`)).toBe(true);
+}
+
 describe("arcsync MCP server", () => {
+  it("reports the package's own version in serverInfo", async () => {
+    const { client } = await connect({});
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    expect(client.getServerVersion()?.version).toBe(pkg.version);
+  });
+
   it("advertises eleven tools, read-only except start_parse and push_diagram", async () => {
     const { client } = await connect({});
     const { tools } = await client.listTools();
@@ -148,6 +170,19 @@ describe("arcsync MCP server", () => {
       });
       expect(out.resources).toHaveLength(3);
       expect(out.relationships).toHaveLength(2);
+    });
+
+    it("cuts oversized JSON and points at the canonical canvas", async () => {
+      const { call } = await connect({
+        "GET /graphs/job1": () =>
+          canon({
+            canonicalGraphId: "g1",
+            graphData: { ...sampleGraph(), nodes: manyNodes() },
+          }),
+      });
+      const { text } = await call("get_diagram", { graphId: "job1", format: "json" });
+      expectTruncated(text, "https://arcsync.dev/canvas/g1");
+      expect(text.slice(0, 200)).toContain('"title": "acme/infra@main"');
     });
 
     it("reports the canonical graphId when given the id start_parse returned", async () => {
@@ -374,6 +409,37 @@ describe("arcsync MCP server", () => {
       ).toMatch(/no graph data/);
       expect((await call("get_delta", { graphId: "g2", version: ts })).text).toMatch(/first saved/);
       expect(calls[0]).toContain("%3A");
+    });
+
+    it("cuts an oversized pull-request delta and links its canvas view", async () => {
+      const { call } = await connect({
+        "GET /graphs/pro": () => ({
+          delta: {
+            status: "ok",
+            tier: "pro",
+            base: { ref: "main", sha: "abc", exact: true },
+            summary: "adds many",
+            counts,
+            nodes: { added: manyNodes(), removed: [], changed: [] },
+            edges: { added: [], removed: [] },
+          },
+        }),
+      });
+      const { text } = await call("get_delta", { graphId: "pro" });
+      expectTruncated(text, "https://arcsync.dev/canvas/pro?delta=1");
+    });
+
+    it("cuts an oversized version diff", async () => {
+      const ts = "2026-10-01T00:00:00.000Z";
+      const { call } = await connect({
+        [`GET /graphs/g1/history/${encodeURIComponent(ts)}/diff?against=previous`]: () => ({
+          counts,
+          nodes: { added: manyNodes(), removed: [], changed: [] },
+          edges: { added: [], removed: [] },
+        }),
+      });
+      const { text } = await call("get_delta", { graphId: "g1", version: ts });
+      expectTruncated(text, "https://arcsync.dev/canvas/g1");
     });
 
     it("refuses a version that is not a timestamp", async () => {
