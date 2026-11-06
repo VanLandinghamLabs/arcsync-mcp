@@ -13,6 +13,7 @@ export const QUOTA_ERROR_CODES = [
   "COST_FREEZE",
   "REPARSE_LIMIT",
   "SYNTH_QUOTA_EXCEEDED",
+  "SYNTH_PLAN_REQUIRED",
 ] as const;
 
 export type QuotaErrorCode = (typeof QUOTA_ERROR_CODES)[number];
@@ -29,6 +30,7 @@ const QUOTA_ERROR_SENTENCES: Record<QuotaErrorCode, string> = {
   REPARSE_LIMIT:
     "This repository failed to parse several times in a row. Fix the failure before parsing it again.",
   SYNTH_QUOTA_EXCEEDED: "This workspace has used its monthly CDK/Pulumi synth quota.",
+  SYNTH_PLAN_REQUIRED: "Server-side CDK and Pulumi builds are temporarily limited to paid plans.",
 };
 
 /** The human `error` a quota refusal carries next to its machine fields. */
@@ -40,8 +42,9 @@ export function quotaErrorMessage(q: {
   resetAt: string;
 }): string {
   const parts = [QUOTA_ERROR_SENTENCES[q.errorCode]];
-  // A cost freeze's counters are tenths of a cent, which mean nothing to a reader.
-  if (q.errorCode !== "COST_FREEZE") {
+  // A cost freeze's counters are tenths of a cent, which mean nothing to a
+  // reader, and a plan refusal spent nothing.
+  if (q.errorCode !== "COST_FREEZE" && q.errorCode !== "SYNTH_PLAN_REQUIRED") {
     parts.push(`Used ${q.used} of ${q.limit} on the ${q.tier} plan.`);
   }
   if (q.resetAt) parts.push(`Resets at ${q.resetAt}.`);

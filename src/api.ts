@@ -57,6 +57,8 @@ const QUOTA_ADVICE: Record<string, string> = {
   QUOTA_EXCEEDED: "the workspace's monthly parse quota is used up; do not retry before the reset",
   SYNTH_QUOTA_EXCEEDED:
     "the workspace's monthly CDK/Pulumi synth quota is used up; do not retry before the reset",
+  SYNTH_PLAN_REQUIRED:
+    "server-side CDK and Pulumi builds are temporarily limited to paid plans; do not retry on this plan",
   DIAGRAM_LIMIT:
     "the workspace stores as many diagrams as its plan allows; reuse an existing diagram",
   REPARSE_LIMIT:

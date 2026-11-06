@@ -187,6 +187,7 @@ describe("makeApiClient", () => {
           resetAt: "",
           upgradeUrl: "",
         }),
+      "GET /graphs/plan": () => json(429, { errorCode: "SYNTH_PLAN_REQUIRED" }),
       "GET /graphs/other": () => json(429, { errorCode: "SOMETHING_NEW" }),
       "GET /graphs/bare": () => json(500, { ok: false }),
     });
@@ -198,6 +199,9 @@ describe("makeApiClient", () => {
     });
     await expect(api.get("/graphs/frozen")).rejects.toThrow(
       /^COST_FREEZE: parsing is frozen for this workspace; do not retry.*\. Used 100 of 100\.$/,
+    );
+    await expect(api.get("/graphs/plan")).rejects.toThrow(
+      "SYNTH_PLAN_REQUIRED: server-side CDK and Pulumi builds are temporarily limited to paid plans; do not retry on this plan.",
     );
     await expect(api.get("/graphs/other")).rejects.toThrow(
       "SOMETHING_NEW: a usage limit was reached.",

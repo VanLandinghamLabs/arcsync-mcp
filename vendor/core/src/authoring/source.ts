@@ -86,6 +86,48 @@ const describeBlock = (
   return { index, kind, id, title, lines };
 };
 
+interface RawBlock {
+  lines: SourceLine[];
+  openLine: number;
+}
+
+interface FenceScan {
+  blocks: RawBlock[];
+  unclosed: { lang: string; openLine: number } | undefined;
+  sawOtherFence: boolean;
+}
+
+const collectFences = (all: SourceLine[], accept: string): FenceScan => {
+  const blocks: RawBlock[] = [];
+  let current: RawBlock | undefined;
+  let inOther = false;
+  let sawOtherFence = false;
+
+  for (const entry of all) {
+    if (current) {
+      if (FENCE_CLOSE.test(entry.text)) {
+        blocks.push(current);
+        current = undefined;
+      } else current.lines.push(entry);
+    } else if (inOther) {
+      if (FENCE_CLOSE.test(entry.text)) inOther = false;
+    } else {
+      const lang = FENCE_OPEN.exec(entry.text)?.[1];
+      if (lang === accept) current = { lines: [], openLine: entry.line };
+      else if (lang !== undefined) {
+        inOther = true;
+        sawOtherFence = true;
+      }
+    }
+  }
+  if (current) blocks.push(current);
+  return {
+    blocks,
+    unclosed: current && { lang: accept, openLine: current.openLine },
+    sawOtherFence,
+  };
+};
+
 export const splitSource = (source: string, diags: Diagnostics): SourceBlock[] => {
   if (source.length > MAX_SOURCE_CHARS) {
     diags.add({
@@ -99,47 +141,32 @@ export const splitSource = (source: string, diags: Diagnostics): SourceBlock[] =
   }
 
   const all = normalise(source).map((text, i) => ({ text, line: i + 1 }));
-  const raw: { lines: SourceLine[]; openLine: number }[] = [];
-  let current: { lines: SourceLine[]; openLine: number } | undefined;
-  let inOther = false;
-  let sawOtherFence = false;
-
-  for (const entry of all) {
-    if (current) {
-      if (FENCE_CLOSE.test(entry.text)) {
-        raw.push(current);
-        current = undefined;
-      } else current.lines.push(entry);
-    } else if (inOther) {
-      if (FENCE_CLOSE.test(entry.text)) inOther = false;
-    } else {
-      const lang = FENCE_OPEN.exec(entry.text)?.[1];
-      if (lang === "arcsync") current = { lines: [], openLine: entry.line };
-      else if (lang !== undefined) {
-        inOther = true;
-        sawOtherFence = true;
-      }
-    }
+  let found = collectFences(all, "arcsync");
+  // A spec may carry a mermaid summary beside its arcsync blocks. It repeats
+  // them, so mermaid fences only count in a source with no arcsync fence.
+  if (found.blocks.length === 0 && found.sawOtherFence) {
+    const mermaid = collectFences(all, "mermaid");
+    if (mermaid.blocks.length > 0) found = mermaid;
   }
-  if (current) {
+  const raw = found.blocks;
+  if (found.unclosed) {
     diags.add({
       level: "warning",
-      block: `block-${raw.length + 1}`,
-      line: current.openLine,
+      block: `block-${raw.length}`,
+      line: found.unclosed.openLine,
       column: 1,
-      message: "arcsync fence is never closed",
+      message: `${found.unclosed.lang} fence is never closed`,
     });
-    raw.push(current);
   }
 
   if (raw.length === 0) {
-    if (sawOtherFence || all.every((l) => l.text.trim() === "")) {
+    if (found.sawOtherFence || all.every((l) => l.text.trim() === "")) {
       diags.add({
         level: "error",
         block: "source",
         line: 1,
         column: 1,
-        message: "no arcsync diagram found",
+        message: "no arcsync or mermaid diagram found",
       });
       return [];
     }
