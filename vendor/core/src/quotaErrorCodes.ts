@@ -47,6 +47,13 @@ export function quotaErrorMessage(q: {
   if (q.errorCode !== "COST_FREEZE" && q.errorCode !== "SYNTH_PLAN_REQUIRED") {
     parts.push(`Used ${q.used} of ${q.limit} on the ${q.tier} plan.`);
   }
-  if (q.resetAt) parts.push(`Resets at ${q.resetAt}.`);
+  // On a freeze, `resetAt` is a trial's end: the first payment lifts it, no timer does.
+  if (q.resetAt) {
+    parts.push(
+      q.errorCode === "COST_FREEZE"
+        ? `It resumes when the first payment clears, after the trial ends at ${q.resetAt}.`
+        : `Resets at ${q.resetAt}.`,
+    );
+  }
   return parts.join(" ");
 }

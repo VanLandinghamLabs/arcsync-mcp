@@ -76,8 +76,18 @@ function quotaText(b: Record<string, unknown>): string | undefined {
       `Used ${b.used} of ${b.limit}${typeof b.tier === "string" ? ` on the ${b.tier} plan` : ""}.`,
     );
   }
-  if (typeof b.resetAt === "string" && b.resetAt) parts.push(`Resets at ${b.resetAt}.`);
-  if (typeof b.upgradeUrl === "string" && b.upgradeUrl) parts.push(`Upgrade: ${b.upgradeUrl}`);
+  const frozen = b.errorCode === "COST_FREEZE";
+  if (typeof b.resetAt === "string" && b.resetAt) {
+    parts.push(
+      frozen
+        ? `It resumes when the first payment clears, after the trial ends at ${b.resetAt}.`
+        : `Resets at ${b.resetAt}.`,
+    );
+  }
+  // Checkout refuses a frozen org on a paid plan, so only Free gets the upgrade link.
+  if ((!frozen || b.tier === "free") && typeof b.upgradeUrl === "string" && b.upgradeUrl) {
+    parts.push(`Upgrade: ${b.upgradeUrl}`);
+  }
   return parts.join(" ");
 }
 

@@ -185,13 +185,52 @@ describe("makeApiClient", () => {
           limit: 100,
           used: 100,
           resetAt: "",
-          upgradeUrl: "",
+          upgradeUrl: "https://arcsync.dev/pricing",
+        }),
+      "GET /graphs/frozen-team": () =>
+        json(429, {
+          errorCode: "COST_FREEZE",
+          tier: "team",
+          limit: 100,
+          used: 100,
+          resetAt: "",
+          upgradeUrl: "https://arcsync.dev/pricing",
+        }),
+      "GET /graphs/frozen-free": () =>
+        json(429, {
+          errorCode: "COST_FREEZE",
+          tier: "free",
+          limit: 100,
+          used: 100,
+          resetAt: "",
+          upgradeUrl: "https://arcsync.dev/pricing",
+        }),
+      "GET /graphs/frozen-trial": () =>
+        json(429, {
+          errorCode: "COST_FREEZE",
+          tier: "pro",
+          limit: 100,
+          used: 100,
+          resetAt: "2026-11-20T12:00:00.000Z",
+          upgradeUrl: "https://arcsync.dev/pricing",
         }),
       "GET /graphs/plan": () => json(429, { errorCode: "SYNTH_PLAN_REQUIRED" }),
       "GET /graphs/other": () => json(429, { errorCode: "SOMETHING_NEW" }),
       "GET /graphs/bare": () => json(500, { ok: false }),
     });
     const api = makeApiClient(config, fn, () => 0);
+    const frozenTrial = await api.get("/graphs/frozen-trial").catch((e: Error) => e.message);
+    expect(frozenTrial).toContain(
+      "It resumes when the first payment clears, after the trial ends at 2026-11-20T12:00:00.000Z.",
+    );
+    expect(frozenTrial).not.toContain("Resets at");
+    expect(frozenTrial).not.toContain("Upgrade:");
+    expect(await api.get("/graphs/frozen-team").catch((e: Error) => e.message)).not.toContain(
+      "Upgrade:",
+    );
+    await expect(api.get("/graphs/frozen-free")).rejects.toThrow(
+      "Upgrade: https://arcsync.dev/pricing",
+    );
     await expect(api.post("/graphs/generate", {})).rejects.toMatchObject({
       status: 429,
       message:
