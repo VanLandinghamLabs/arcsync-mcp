@@ -3,7 +3,7 @@
   "name": "io.github.VanLandinghamLabs/arcsync-mcp",
   "title": "ArcSync",
   "description": "Architecture graphs from Terraform, CDK, CloudFormation, Pulumi and ARM, for coding agents",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "websiteUrl": "https://arcsync.dev/docs/mcp",
   "repository": {
     "url": "https://github.com/VanLandinghamLabs/arcsync-mcp",
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "arcsync-mcp",
-      "version": "0.3.8",
+      "version": "0.3.9",
       "transport": {
         "type": "stdio"
       },
