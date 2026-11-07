@@ -84,8 +84,13 @@ function quotaText(b: Record<string, unknown>): string | undefined {
         : `Resets at ${b.resetAt}.`,
     );
   }
-  // Checkout refuses a frozen org on a paid plan, so only Free gets the upgrade link.
-  if ((!frozen || b.tier === "free") && typeof b.upgradeUrl === "string" && b.upgradeUrl) {
+  // Checkout refuses a frozen org on a paid plan, and any org the server flags
+  // `manageBilling`, so neither gets the upgrade link (#2839).
+  if (b.manageBilling === true) {
+    parts.push(
+      "The workspace's subscription has a payment outstanding; the owner manages it at https://arcsync.dev/account/billing",
+    );
+  } else if ((!frozen || b.tier === "free") && typeof b.upgradeUrl === "string" && b.upgradeUrl) {
     parts.push(`Upgrade: ${b.upgradeUrl}`);
   }
   return parts.join(" ");

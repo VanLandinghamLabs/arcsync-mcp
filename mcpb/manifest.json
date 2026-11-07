@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "arcsync-mcp",
   "display_name": "ArcSync",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Architecture graphs from Terraform, CDK, CloudFormation, Pulumi and ARM, for coding agents",
   "long_description": "Gives Claude the architecture graph ArcSync parsed from your infrastructure-as-code: resources and the IAM, network and event relationships between them. Claude can also write, validate and publish its own ArcSync diagrams.\n\nThe first tool call returns a link to connect your ArcSync account in the browser. To use a credential you created in Settings instead, fill in both fields below.",
   "author": {

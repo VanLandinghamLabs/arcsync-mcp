@@ -214,6 +214,16 @@ describe("makeApiClient", () => {
           resetAt: "2026-11-20T12:00:00.000Z",
           upgradeUrl: "https://arcsync.dev/pricing",
         }),
+      "GET /graphs/frozen-subscribed": () =>
+        json(429, {
+          errorCode: "COST_FREEZE",
+          tier: "free",
+          limit: 100,
+          used: 100,
+          resetAt: "",
+          upgradeUrl: "",
+          manageBilling: true,
+        }),
       "GET /graphs/plan": () => json(429, { errorCode: "SYNTH_PLAN_REQUIRED" }),
       "GET /graphs/other": () => json(429, { errorCode: "SOMETHING_NEW" }),
       "GET /graphs/bare": () => json(500, { ok: false }),
@@ -231,6 +241,10 @@ describe("makeApiClient", () => {
     await expect(api.get("/graphs/frozen-free")).rejects.toThrow(
       "Upgrade: https://arcsync.dev/pricing",
     );
+    // #2839: checkout refuses a Free org that still holds a subscription.
+    const subscribed = await api.get("/graphs/frozen-subscribed").catch((e: Error) => e.message);
+    expect(subscribed).not.toContain("Upgrade:");
+    expect(subscribed).toContain("https://arcsync.dev/account/billing");
     await expect(api.post("/graphs/generate", {})).rejects.toMatchObject({
       status: 429,
       message:
