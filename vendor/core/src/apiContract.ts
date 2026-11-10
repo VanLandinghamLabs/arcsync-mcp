@@ -373,59 +373,8 @@ export interface PublicCanonGraphRead extends CanonGraphReadBase {
  * three apart, and decides which allowlist `canonical` is. */
 export type CanonGraphRead = MemberCanonGraphRead | ViewerCanonGraphRead | PublicCanonGraphRead;
 
-/**
- * The CANON row as DynamoDB holds it, spread at the top level of a
- * seed-follow read. Unvalidated, so every field is optional, and typed as
- * stored: `isPublic` is the STRING "true" the gallery GSI keys off, and
- * `engines` is a String Set, which JSON serializes to `{}` (#2917). The store
- * returns the row untyped, so the handler's `satisfies` checks only the keys it
- * writes itself, not these.
- */
-export interface StoredCanonicalFields {
-  repoSlug?: string;
-  contentHash?: string;
-  latestVersionId?: string;
-  graphDataKey?: string;
-  displayOwner?: string;
-  displayRepo?: string;
-  branch?: string;
-  subpath?: string;
-  projectType?: string;
-  engines?: unknown;
-  provider?: string;
-  sourceVisibility?: "public" | "private";
-  observedVisibility?: "public";
-  isPublic?: "true";
-  privatizedAt?: string;
-  thumbnailKey?: string;
-  thumbnailKeys?: Record<string, string>;
-  nodeCount?: number;
-  edgeCount?: number;
-  createdAt?: string;
-  lastParsedAt?: string;
-  parseCount?: number;
-  driftDetectedAt?: string;
-  driftSha?: string;
-  commitSha?: string;
-  sourceObservedAt?: string;
-  description?: string;
-  primaryLanguage?: string;
-  license?: string;
-  starsCount?: number;
-  homepage?: string;
-  pushedAt?: string;
-  ownerAvatarUrl?: string;
-  readmeExcerpt?: string;
-  synthInputs?: SynthInputs;
-  synthInputsFromRepo?: SynthInputs;
-}
-
-/**
- * `GET /graphs/{id}` for a JOB# id whose parse landed on a CANON: the CANON
- * row spread at the top level, under the JOB# id. The client redirects to
- * `canonicalGraphId`. Owner-only, so never a viewer.
- */
-export interface SeedGraphRead extends StoredCanonicalFields, DiagramSettingsFields {
+export interface SeedGraphReadBase extends DiagramSettingsFields {
+  /** The JOB# id the caller asked for, not the CANON's. */
   graphId: string;
   canonicalGraphId: string;
   /** The CANON's cached repoUrl, else the seed row's, else "". */
@@ -435,10 +384,35 @@ export interface SeedGraphRead extends StoredCanonicalFields, DiagramSettingsFie
   repoInfo: RepoInfo;
   /** No layout here: the JOB# id's WS room is the caller's own and syncs none. */
   layoutVersion: 0;
-  access: "member" | null;
-  role: OrgRole | null;
   thumbnailPreview?: ThumbnailPreview;
 }
+
+/** A seed-follow read by a member of an org that holds the repo: the
+ * {@link MemberCanonicalFields} at the top level. */
+export interface MemberSeedGraphRead
+  extends Omit<MemberCanonicalFields, "graphId" | "repoKey">,
+    SeedGraphReadBase {
+  access: "member";
+  role: OrgRole;
+}
+
+/** A seed-follow read of a public CANON by a caller whose orgs no longer hold
+ * it: the {@link PublicCanonicalFields} at the top level. */
+export interface PublicSeedGraphRead
+  extends Omit<PublicCanonicalFields, "graphId">,
+    SeedGraphReadBase {
+  access: null;
+  role: null;
+}
+
+/**
+ * `GET /graphs/{id}` for a JOB# id whose parse landed on a CANON: the CANON's
+ * fields spread at the top level, under the JOB# id, chosen by the same
+ * allowlists as {@link CanonGraphRead}'s `canonical`. The client redirects to
+ * `canonicalGraphId`. Only the row's owner reaches it, and the gate admits no
+ * viewer, so `access` is never "viewer".
+ */
+export type SeedGraphRead = MemberSeedGraphRead | PublicSeedGraphRead;
 
 /**
  * `GET /graphs/{id}` for the caller's own JOB# row, passed through whole

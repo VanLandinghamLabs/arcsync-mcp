@@ -320,6 +320,9 @@ function syncVerb(
   // would still have named a Route53/CloudFront/ELB-sourced dependency, which
   // no parser emits today but which contradicts the rule either way.
   if (edge.type === EdgeType.DEPENDENCY) return undefined;
+  // Above `SOURCE_VERBS`: a distribution's CSP `connect-src` edge is the pages
+  // it serves calling the target, not the distribution forwarding to it.
+  if (edge.viaProperty === "connect-src") return "calls";
   if (source) {
     const named = lookupByType(SOURCE_VERBS, source.type);
     if (named) return named;

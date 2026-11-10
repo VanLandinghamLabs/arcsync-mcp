@@ -204,6 +204,39 @@ describe("arcsync MCP server", () => {
       expect(out).toMatchObject({ graphId: "g1", canvasUrl: "https://arcsync.dev/canvas/g1" });
     });
 
+    // #2917: a non-holder's seed-follow read carries only the public
+    // allowlist; before it, the raw stored row (engines `{}`, isPublic "true").
+    it.each([
+      [
+        "the allowlisted shape",
+        { isPublic: true, engines: ["terraform"], subpath: "", commitSha: "c0" },
+      ],
+      [
+        "the raw-row shape sent before #2917",
+        {
+          isPublic: "true",
+          engines: {},
+          commitSha: "c0",
+          contentHash: "h",
+          thumbnailKeys: { webp_800: "k" },
+        },
+      ],
+    ])("reads a seed-follow answer in %s the same way", async (_name, fields) => {
+      const { call } = await connect({
+        "GET /graphs/job1": () =>
+          seed({ ...fields, access: null, role: null, repoUrl: "https://github.com/acme/infra" }),
+      });
+      const out = JSON.parse((await call("get_diagram", { graphId: "job1", format: "json" })).text);
+      expect(out).toMatchObject({
+        graphId: "g1",
+        title: "acme/infra@main",
+        projectType: "terraform",
+        provider: "aws",
+        lastParsedAt: "2026-10-01T00:00:00.000Z",
+        commitSha: "c0",
+      });
+    });
+
     it("clips a very large Mermaid document", async () => {
       const g = sampleGraph();
       const base = g.nodes[0];
