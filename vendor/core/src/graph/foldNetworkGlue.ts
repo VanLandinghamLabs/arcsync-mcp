@@ -845,7 +845,7 @@ function referenceNames(value: unknown, node: ResourceNode): boolean {
 }
 
 /** What a Pulumi plan writes for an input it cannot resolve yet. */
-const PULUMI_UNKNOWN = "04da6b54-80e4-46f7-96ec-b56ff0331ba9";
+export const PULUMI_UNKNOWN = "04da6b54-80e4-46f7-96ec-b56ff0331ba9";
 
 /** Whether a Terraform expression (`${aws_subnet.a[*].id}`, `${concat(...)}`,
  * `${[for s in aws_subnet.a : s.id]}`) mentions `address` as a whole address. */
