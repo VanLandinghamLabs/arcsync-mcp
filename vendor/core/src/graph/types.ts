@@ -42,6 +42,9 @@ export enum ResourceType {
   EC2_TRANSIT_GATEWAY = "aws_ec2_transit_gateway",
   EC2_EIP = "aws_eip",
   EC2_ROUTE_TABLE = "aws_route_table",
+  /** Its entries fold onto it as `INGRESS`/`EGRESS` rails and its subnet
+   * associations into `Subnet -> NACL` edges (`foldNetworkGlue`). */
+  EC2_NETWORK_ACL = "aws_network_acl",
 
   // Networking "join" resources. Each one expresses a RELATIONSHIP rather than
   // a thing — an association, a route, an attachment — and `foldNetworkGlue`
@@ -690,7 +693,8 @@ export type NetworkGlueKind =
   | "route"
   | "gatewayAttachment"
   | "securityGroupRule"
-  | "listener";
+  | "listener"
+  | "networkAclAssociation";
 
 export interface GraphMetadata {
   source: ProjectType;

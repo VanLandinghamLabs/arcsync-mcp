@@ -5,7 +5,8 @@ import { ResourceType } from "./types.js";
  * Hand-authored nodes (`docs/superpowers/specs/2026-10-21-arcsync-diagram-syntax-and-interactive-embeds-design.md` §2):
  * `type: "authored"`, with `attributes.icon` (a namespaced id such as `user` or
  * `aws:lambda`), `attributes.kind` (free text such as `zone`), and any other
- * properties. Nothing here applies to an IaC-parsed node.
+ * properties. Nothing here applies to an IaC-parsed resource; the one authored
+ * node a parse adds is a CloudFormation boundary node (`cfnExternalSystems`).
  */
 export function isAuthored(node: Pick<ResourceNode, "type">): boolean {
   return node.type === ResourceType.AUTHORED;

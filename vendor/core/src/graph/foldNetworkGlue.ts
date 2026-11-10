@@ -3,7 +3,9 @@ import {
   fallbackRailFor,
   namesNode,
   railLabelFor,
+  readAttribute,
   readAttributeEntry,
+  readString,
   referenceToken,
 } from "./fallbackRail.js";
 import { lookupByType } from "./typeLookup.js";
@@ -86,7 +88,7 @@ const PROFILE_POLICY_KEYS: readonly string[] = ["roles", "path"];
  * one that is not a `NetworkGlueKind`: it mints no edge, so nothing ever
  * carries a `viaFold` marker for it.
  */
-type GlueKind = NetworkGlueKind | "instanceProfile";
+type GlueKind = NetworkGlueKind | "instanceProfile" | "networkAclEntry";
 
 const GLUE_KIND_BY_TYPE: Partial<Record<ResourceType, GlueKind>> = {
   [ResourceType.EC2_ROUTE_TABLE_ASSOCIATION]: "routeTableAssociation",
@@ -136,7 +138,32 @@ const GLUE_KIND_BY_RESOURCE_TYPE: Readonly<Record<string, GlueKind>> = {
   aws_alb_listener: "listener",
   "aws:lb/listener:Listener": "listener",
   "aws:alb/listener:Listener": "listener",
+  "AWS::EC2::NetworkAclEntry": "networkAclEntry",
+  aws_network_acl_rule: "networkAclEntry",
+  "aws:ec2/networkAclRule:NetworkAclRule": "networkAclEntry",
+  "aws-native:ec2:NetworkAclEntry": "networkAclEntry",
+  "AWS::EC2::SubnetNetworkAclAssociation": "networkAclAssociation",
+  aws_network_acl_association: "networkAclAssociation",
+  "aws:ec2/networkAclAssociation:NetworkAclAssociation": "networkAclAssociation",
+  "aws-native:ec2:SubnetNetworkAclAssociation": "networkAclAssociation",
 };
+
+/** A NACL as a graph stored before `EC2_NETWORK_ACL` existed spells it. */
+const NETWORK_ACL_RESOURCE_TYPES: ReadonlySet<string> = new Set([
+  "AWS::EC2::NetworkAcl",
+  "aws_network_acl",
+  "aws_default_network_acl",
+  "aws:ec2/networkAcl:NetworkAcl",
+  "aws:ec2/defaultNetworkAcl:DefaultNetworkAcl",
+  "aws-native:ec2:NetworkAcl",
+]);
+
+function isNetworkAcl(node: ResourceNode): boolean {
+  return (
+    node.type === ResourceType.EC2_NETWORK_ACL ||
+    (node.type === ResourceType.UNKNOWN && NETWORK_ACL_RESOURCE_TYPES.has(node.resourceType))
+  );
+}
 
 /**
  * Which join `node` is, or `undefined` when it is not one.
@@ -165,7 +192,14 @@ const PARENT_TYPE_BY_KIND: Record<GlueKind, ResourceType> = {
   instanceProfile: ResourceType.EC2_INSTANCE,
   securityGroupRule: ResourceType.EC2_SECURITY_GROUP,
   listener: ResourceType.ELB_LOAD_BALANCER,
+  networkAclEntry: ResourceType.EC2_NETWORK_ACL,
+  networkAclAssociation: ResourceType.EC2_NETWORK_ACL,
 };
+
+function isParentOf(kind: GlueKind, node: ResourceNode): boolean {
+  const type = PARENT_TYPE_BY_KIND[kind];
+  return type === ResourceType.EC2_NETWORK_ACL ? isNetworkAcl(node) : node.type === type;
+}
 
 /** Whether an edge participates in the "would folding strand anything?" test.
  * Containment is excluded for `foldFallbackNodes`' reason: a join's CONTAINS
@@ -293,6 +327,8 @@ interface Fold {
   kind: GlueKind;
   parent: ResourceNode;
   rail?: FallbackRail;
+  /** A NACL entry's place in its table; see `naclEntryRail`. */
+  order?: number;
   /** The edge to mint. Absent when the relationship is drawn as a rail only.
    *
    * `verb` is the bare relationship and `detail` the part that varies per join
@@ -312,6 +348,9 @@ export function foldNetworkGlue(graph: ArchGraph, options?: FoldNetworkGlueOptio
   // happened to point the reference.
   const neighbours = new Map<string, Neighbour[]>();
   const containerIds = new Set<string>();
+  // A NACL's own `subnet_ids`/`subnetIds` reference, turned round so it reads
+  // like the association resource it is the inline form of.
+  const naclSubnetEdgeIds = new Set<string>();
   for (const edge of graph.edges) {
     if (edge.type === EdgeType.CONTAINS) {
       containerIds.add(edge.source);
@@ -320,6 +359,13 @@ export function foldNetworkGlue(graph: ArchGraph, options?: FoldNetworkGlueOptio
     const source = nodeById.get(edge.source);
     const target = nodeById.get(edge.target);
     if (!source || !target) continue;
+    if (
+      isNetworkAcl(source) &&
+      target.type === ResourceType.EC2_SUBNET &&
+      isSubnetListEdge(source, target)
+    ) {
+      naclSubnetEdgeIds.add(edge.id);
+    }
     const from = neighbours.get(edge.source);
     if (from) from.push({ edge, node: target });
     else neighbours.set(edge.source, [{ edge, node: target }]);
@@ -344,7 +390,7 @@ export function foldNetworkGlue(graph: ArchGraph, options?: FoldNetworkGlueOptio
     const parent =
       kind === "securityGroupRule"
         ? securityGroupRuleOwner(node, structural)
-        : structural.find((n) => n.node.type === PARENT_TYPE_BY_KIND[kind])?.node;
+        : structural.find((n) => isParentOf(kind, n.node))?.node;
     // Fold only into a parent that survived filtering. Otherwise the join stays
     // — classified, so it draws as a real networking card rather than a grey
     // one, but unfolded, because there is nothing left to fold it onto.
@@ -374,25 +420,57 @@ export function foldNetworkGlue(graph: ArchGraph, options?: FoldNetworkGlueOptio
     foldedIds.add(node.id);
   }
 
-  if (glueCounts.size === 0) return graph;
+  // Inline `ingress`/`egress` blocks on a Terraform or Pulumi NACL are entries
+  // too. They are no node, so they draw as rows but are never counted as glue.
+  for (const node of graph.nodes) {
+    if (!isNetworkAcl(node) || options?.skipParents?.has(node.id)) continue;
+    for (const key of ["ingress", "egress"]) {
+      const blocks = readAttribute(node.attributes, key);
+      if (!Array.isArray(blocks)) continue;
+      blocks.forEach((block, i) => {
+        if (!block || typeof block !== "object") return;
+        const id = `${node.id}/${key}[${i}]`;
+        const cidr = attributeUnder(block, NACL_CIDR_KEYS)?.value;
+        const peer =
+          cidr === undefined ? undefined : graph.nodes.find((n) => referenceNames(cidr, n));
+        const entry = naclEntryRail({ id, name: id }, block, key === "egress", peer?.name);
+        folds.push({ glue: node, kind: "networkAclEntry", parent: node, ...entry });
+      });
+    }
+  }
+
+  if (folds.length === 0 && glueCounts.size === 0 && naclSubnetEdgeIds.size === 0) return graph;
 
   // Rail order on a card: every ROUTE rail in template order, then PROFILE,
   // then whatever the later passes append. `folds` is already in node order,
   // and the two kinds are swept separately so a profile declared between two
-  // routes cannot land between their rails.
+  // routes cannot land between their rails. NACL entries alone are re-sorted:
+  // their rule numbers, not the template, are the order AWS evaluates them in.
   const railsByParent = new Map<string, FallbackRail[]>();
-  for (const kind of ["route", "instanceProfile", "securityGroupRule", "listener"] as const) {
-    for (const fold of folds) {
-      if (fold.kind !== kind || !fold.rail) continue;
+  const kinds = ["route", "instanceProfile", "securityGroupRule", "listener", "networkAclEntry"];
+  for (const kind of kinds) {
+    const ofKind = folds.filter((fold) => fold.kind === kind && fold.rail);
+    if (kind === "networkAclEntry") ofKind.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const fold of ofKind) {
       const rails = railsByParent.get(fold.parent.id);
-      if (rails) rails.push(fold.rail);
-      else railsByParent.set(fold.parent.id, [fold.rail]);
+      if (rails) rails.push(fold.rail as FallbackRail);
+      else railsByParent.set(fold.parent.id, [fold.rail as FallbackRail]);
     }
   }
 
-  const survivingEdges = graph.edges.filter(
-    (e) => !foldedIds.has(e.source) && !foldedIds.has(e.target),
-  );
+  const survivingEdges = graph.edges
+    .filter((e) => !foldedIds.has(e.source) && !foldedIds.has(e.target))
+    .map((e) =>
+      naclSubnetEdgeIds.has(e.id)
+        ? {
+            ...e,
+            source: e.target,
+            target: e.source,
+            label: FOLD_VERBS.networkAclAssociation,
+            viaFold: "networkAclAssociation" as const,
+          }
+        : e,
+    );
   const existingByPair = new Map<string, ResourceEdge>();
   for (const edge of survivingEdges) {
     if (edge.type === EdgeType.CONTAINS) continue;
@@ -461,14 +539,16 @@ export function foldNetworkGlue(graph: ArchGraph, options?: FoldNetworkGlueOptio
       .filter((n) => !foldedIds.has(n.id))
       .map((n) => {
         const count = glueCounts.get(n.id);
-        if (!count) return n;
         const rails = railsByParent.get(n.id);
+        if (!count && !rails) return n;
         // Rails are appended, never replaced: `filterGraphForDisplay` stamps
         // LOGS rails upstream and `foldFallbackNodes` appends its own
         // downstream.
-        return rails
-          ? { ...n, networkGlue: count, fallbackRails: [...(n.fallbackRails ?? []), ...rails] }
-          : { ...n, networkGlue: count };
+        return {
+          ...n,
+          ...(count ? { networkGlue: count } : {}),
+          ...(rails ? { fallbackRails: [...(n.fallbackRails ?? []), ...rails] } : {}),
+        };
       }),
     edges: [
       ...survivingEdges.map((e) => {
@@ -488,7 +568,7 @@ function resolveFold(
   parent: ResourceNode,
   other: ResourceNode | undefined,
 ): Fold | undefined {
-  if (kind === "routeTableAssociation") {
+  if (kind === "routeTableAssociation" || kind === "networkAclAssociation") {
     // The subnet is the whole content of an association. Without one there is
     // no relationship to draw, and folding would delete the join outright
     // rather than compact it.
@@ -497,12 +577,21 @@ function resolveFold(
       glue,
       kind,
       parent,
-      mint: {
-        source: other.id,
-        target: parent.id,
-        verb: FOLD_VERBS.routeTableAssociation,
-        via: "routeTableAssociation",
-      },
+      mint: { source: other.id, target: parent.id, verb: FOLD_VERBS[kind], via: kind },
+    };
+  }
+
+  if (kind === "networkAclEntry") {
+    // The one other node an entry may reach is the one its CIDR names: a rule
+    // admitting `aws_vpc.main.cidr_block` is still just a row.
+    const cidr = attributeUnder(glue.attributes, NACL_CIDR_KEYS)?.value;
+    if (other && !referenceNames(cidr, other)) return undefined;
+    const egress = readAttribute(glue.attributes, "egress");
+    return {
+      glue,
+      kind,
+      parent,
+      ...naclEntryRail(glue, glue.attributes, egress === true || egress === "true", other?.name),
     };
   }
 
@@ -740,5 +829,119 @@ function listenerFold(
       detail: detail || undefined,
       via: "listener",
     },
+  };
+}
+
+const NACL_CIDR_KEYS = ["cidrblock", "ipv6cidrblock"];
+
+/** Whether a reference names `node`, read loosely enough to accept the
+ * attribute forms a CIDR or subnet list uses: `${aws_vpc.main.cidr_block}`,
+ * `{ "Fn::GetAtt": ["Vpc", "CidrBlock"] }`, `${aws_subnet.a.id}`. */
+function referenceNames(value: unknown, node: ResourceNode): boolean {
+  const token = referenceToken(value);
+  if (!token) return false;
+  if (namesNode(token, node)) return true;
+  return typeof value === "string" && namesNode(token.replace(/\.[^.]+$/, ""), node);
+}
+
+/** What a Pulumi plan writes for an input it cannot resolve yet. */
+const PULUMI_UNKNOWN = "04da6b54-80e4-46f7-96ec-b56ff0331ba9";
+
+/** Whether a Terraform expression (`${aws_subnet.a[*].id}`, `${concat(...)}`,
+ * `${[for s in aws_subnet.a : s.id]}`) mentions `address` as a whole address. */
+function mentionsAddress(value: unknown, address: string): boolean {
+  if (typeof value !== "string" || !value.startsWith("${")) return false;
+  const escaped = address.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\w.])${escaped}(\\W|$)`).test(value);
+}
+
+/** Whether an `ACL -> Subnet` reference edge is the ACL's own `subnet_ids`.
+ * A rule CIDR or a `depends_on` can reference a subnet too, and must not read
+ * as an association. An item names the subnet by reference, by address inside
+ * an expression, or by the resolved id a Terraform plan carries. An item a
+ * Pulumi plan could not resolve yet may be any subnet whose id is unknown. */
+function isSubnetListEdge(acl: ResourceNode, subnet: ResourceNode): boolean {
+  const raw = readAttribute(acl.attributes, "subnetids");
+  const items = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+  const address = subnet.id.slice(subnet.id.lastIndexOf("/") + 1).replace(/#\d+$/, "");
+  const resolvedId = readString(subnet.attributes, "id");
+  return (
+    items.some(
+      (item) =>
+        referenceNames(item, subnet) ||
+        mentionsAddress(item, address) ||
+        (resolvedId !== undefined && item === resolvedId),
+    ) ||
+    (resolvedId === undefined && items.includes(PULUMI_UNKNOWN))
+  );
+}
+
+/** IANA numbers a NACL entry spells its protocol with (`-1` is every protocol). */
+const NACL_PROTOCOLS: Readonly<Record<string, string>> = {
+  "-1": "all",
+  "1": "icmp",
+  "6": "tcp",
+  "17": "udp",
+  "58": "icmpv6",
+};
+
+/**
+ * One NACL entry as a rail reading `#105 allow tcp 443 → 0.0.0.0/0`: the SG
+ * rule's `traffic arrow peer` row, led by the rule number and action that make
+ * a NACL ordered and stateless. `order` sorts ingress before egress and each by
+ * rule number; an unnumbered entry goes last, where AWS keeps its `*` rule.
+ * Reads a CloudFormation/aws-native entry, a Terraform or Pulumi rule resource,
+ * and an inline `ingress`/`egress` block alike.
+ */
+function naclEntryRail(
+  entry: Pick<ResourceNode, "id" | "name">,
+  attributes: Record<string, unknown>,
+  egress: boolean,
+  /** The node a referenced CIDR resolves to, shown in its place. */
+  peerName?: string,
+): { rail: FallbackRail; order: number } {
+  const value = (keys: string[], fallbackName?: string) => {
+    const found = attributeUnder(attributes, keys);
+    const shown = found ? railValue(found.value, fallbackName) : undefined;
+    return found && shown ? { key: found.key, shown } : undefined;
+  };
+  const number = value(["rulenumber", "ruleno"]);
+  const action = value(["ruleaction", "action"]);
+  const cidr = value(NACL_CIDR_KEYS, peerName);
+  const raw = value(["protocol"])?.shown.toLowerCase();
+  const protocol = raw ? (lookupByType(NACL_PROTOCOLS, raw) ?? raw) : undefined;
+  const range = readAttribute(attributes, "portrange") as Record<string, unknown> | undefined;
+  const from = railValue(readAttribute(range ?? attributes, range ? "from" : "fromport"));
+  const to = railValue(readAttribute(range ?? attributes, range ? "to" : "toport"));
+  const ports =
+    (protocol === "tcp" || protocol === "udp") && from
+      ? !to || to === from
+        ? from
+        : `${from}-${to}`
+      : undefined;
+  const traffic = [protocol, ports].filter(Boolean).join(" ");
+  const name = [
+    number && `#${number.shown}`,
+    action?.shown,
+    traffic,
+    cidr && `${egress ? "→" : "←"} ${cidr.shown}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const policy = [
+    number && `${number.key} ${number.shown}`,
+    action && `${action.key} ${action.shown}`,
+    traffic,
+    cidr && `${cidr.key} ${cidr.shown}`,
+  ].filter((line): line is string => !!line);
+  const rank = Number(number?.shown);
+  return {
+    rail: fallbackRailFor(
+      entry,
+      railLabelFor(egress ? "egress" : "ingress"),
+      policy,
+      name || undefined,
+    ),
+    order: (egress ? 1e5 : 0) + (Number.isInteger(rank) ? rank : 65536),
   };
 }

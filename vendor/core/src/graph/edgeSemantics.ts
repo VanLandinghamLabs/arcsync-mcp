@@ -191,6 +191,7 @@ export const FOLD_VERBS: Record<NetworkGlueKind, string> = {
   gatewayAttachment: "attaches",
   securityGroupRule: "connects",
   listener: "forwards",
+  networkAclAssociation: "filtered by",
 };
 
 /** Sources whose outbound edge has a name the topology alone establishes. */

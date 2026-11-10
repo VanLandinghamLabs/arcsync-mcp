@@ -36,6 +36,7 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.EC2_TRANSIT_GATEWAY]: "networking",
   [ResourceType.EC2_EIP]: "networking",
   [ResourceType.EC2_ROUTE_TABLE]: "networking",
+  [ResourceType.EC2_NETWORK_ACL]: "networking",
   // The networking join resources. They are relationships, so they normally
   // fold away before a legend ever counts them (`foldNetworkGlue`) — but an
   // unfolded one is still networking, not `generic`.

@@ -137,7 +137,7 @@ export function railLabelFor(key: string): string {
  * shared reading of a folded node that produces both.
  */
 export function fallbackRailFor(
-  folded: ResourceNode,
+  folded: Pick<ResourceNode, "id" | "name">,
   label: string,
   policy: string[],
   /** Name to draw INSTEAD of the folded node's own. A route's rail reads

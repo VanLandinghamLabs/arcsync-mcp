@@ -75,6 +75,7 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.EC2_TRANSIT_GATEWAY]: "Transit Gateway",
   [ResourceType.EC2_EIP]: "Elastic IP",
   [ResourceType.EC2_ROUTE_TABLE]: "Route Table",
+  [ResourceType.EC2_NETWORK_ACL]: "Network ACL",
   [ResourceType.EC2_ROUTE_TABLE_ASSOCIATION]: "Route Table Association",
   [ResourceType.EC2_ROUTE]: "Route",
   [ResourceType.EC2_INTERNET_GATEWAY_ATTACHMENT]: "Gateway Attachment",

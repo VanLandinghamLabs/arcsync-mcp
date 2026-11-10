@@ -30,6 +30,7 @@ export const AWS_ICON_FILENAMES: Partial<Record<ResourceType, string>> = {
   [ResourceType.EC2_TRANSIT_GATEWAY]: "transit-gateway.svg",
   [ResourceType.EC2_EIP]: "ec2.svg",
   [ResourceType.EC2_ROUTE_TABLE]: "vpc.svg",
+  [ResourceType.EC2_NETWORK_ACL]: "vpc.svg",
   [ResourceType.EC2_ROUTE_TABLE_ASSOCIATION]: "vpc.svg",
   [ResourceType.EC2_ROUTE]: "vpc.svg",
   [ResourceType.EC2_INTERNET_GATEWAY_ATTACHMENT]: "vpc.svg",
