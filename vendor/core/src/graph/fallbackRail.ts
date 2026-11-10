@@ -114,6 +114,11 @@ export function railLabelFor(key: string): string {
   if (key === "onfailure") return "ON FAIL";
   if (key === "route") return "ROUTE";
   if (key === "instanceprofile") return "PROFILE";
+  if (key === "subscription") return "SUB";
+  if (key === "target") return "TARGET";
+  if (key === "ingress") return "INGRESS";
+  if (key === "egress") return "EGRESS";
+  if (key === "listener") return "LISTENER";
   return "DLQ";
 }
 
@@ -173,4 +178,32 @@ export function fallbackRailHeight(node: Pick<ResourceNode, "fallbackRails">, ex
   const lines = rails.reduce((sum, rail) => sum + rail.policy.length, 0);
   if (lines === 0) return strips;
   return strips + FALLBACK_RAIL_DETAIL_PAD + lines * FALLBACK_RAIL_DETAIL_LINE_H;
+}
+
+/** The logical id a reference names: `{ Ref: X }`, `{ "Fn::GetAtt": [X, ...] }`,
+ * `${aws_sqs_queue.x.arn}`, or a literal id. */
+export function referenceToken(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    if (!value.startsWith("${")) return value || undefined;
+    return value
+      .slice(2, -1)
+      .replace(/\[[^\]]*\]/g, "")
+      .replace(/\.(id|arn)$/, "");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const ref = (value as Record<string, unknown>).Ref;
+  if (typeof ref === "string") return ref;
+  const getAtt = (value as Record<string, unknown>)["Fn::GetAtt"];
+  if (Array.isArray(getAtt) && typeof getAtt[0] === "string") return getAtt[0];
+  if (typeof getAtt === "string") return getAtt.split(".")[0];
+  return undefined;
+}
+
+export function namesNode(token: string, node: ResourceNode): boolean {
+  return (
+    node.id === token ||
+    node.id.endsWith(`/${token}`) ||
+    node.id.endsWith(`.${token}`) ||
+    node.name === token
+  );
 }

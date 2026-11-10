@@ -1,8 +1,12 @@
 import { lookupByType } from "../graph/typeLookup.js";
 import { type ResourceNode, ResourceType } from "../graph/types.js";
+import { azapiArmType } from "../parsers/terraform/azapiType.js";
 import { AWS_ICON_FILENAMES } from "./awsIconRegistry.js";
 import { AZURE_ICON_FILENAMES } from "./azureIconRegistry.js";
 import { GCP_ICON_FILENAMES } from "./gcpIconRegistry.js";
+import { unknownIconSubpath } from "./unknownIconFallback.js";
+
+export { FALLBACK_ICON_SUBPATHS, unknownIconSubpath } from "./unknownIconFallback.js";
 
 /** Drawn size of a node's service icon, in scene units. Both renderers scale
  *  the loaded bitmap to this box, so it also sets the text column's width
@@ -81,11 +85,15 @@ export function authoredIconSubpath(attributes: Record<string, unknown> | undefi
 }
 
 /** `iconSubpathFor` for a whole node: an authored node resolves its icon from
- * its attributes, every other node from its type exactly as before. */
+ * its attributes, an unknown one from its raw `resourceType`'s namespace, and
+ * every other node from its type. */
 export function iconSubpathForNode(
-  node: Pick<ResourceNode, "type" | "attributes">,
+  node: Pick<ResourceNode, "type" | "attributes"> & Partial<Pick<ResourceNode, "resourceType">>,
 ): string | undefined {
-  return node.type === ResourceType.AUTHORED
-    ? authoredIconSubpath(node.attributes)
-    : iconSubpathFor(node.type);
+  if (node.type === ResourceType.AUTHORED) return authoredIconSubpath(node.attributes);
+  if (node.type === ResourceType.UNKNOWN)
+    return unknownIconSubpath(
+      azapiArmType(node.resourceType, node.attributes) ?? node.resourceType,
+    );
+  return iconSubpathFor(node.type);
 }

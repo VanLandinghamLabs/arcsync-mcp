@@ -75,4 +75,33 @@ export const AWS_ICON_FILENAMES: Partial<Record<ResourceType, string>> = {
   // Orchestration
   [ResourceType.SFN_STATE_MACHINE]: "step-functions.svg",
   [ResourceType.CLOUDFORMATION_STACK]: "cloudformation.svg",
+  [ResourceType.SCHEDULER_SCHEDULE]: "eventbridge.svg",
+  [ResourceType.BATCH_COMPUTE_ENVIRONMENT]: "batch.svg",
+  [ResourceType.BATCH_JOB_QUEUE]: "batch.svg",
+  [ResourceType.BATCH_JOB_DEFINITION]: "batch.svg",
+
+  // Management & governance
+  [ResourceType.SSM_PARAMETER]: "systems-manager.svg",
+  [ResourceType.SSM_DOCUMENT]: "systems-manager.svg",
+  [ResourceType.CLOUDWATCH_ALARM]: "cloudwatch.svg",
+  [ResourceType.CLOUDWATCH_DASHBOARD]: "cloudwatch.svg",
+  [ResourceType.CLOUDWATCH_LOG_METRIC_FILTER]: "cloudwatch.svg",
+  [ResourceType.CLOUDTRAIL_TRAIL]: "cloudtrail.svg",
+  [ResourceType.GUARDDUTY_DETECTOR]: "guardduty.svg",
+  [ResourceType.BUDGETS_BUDGET]: "budgets.svg",
+
+  // Analytics & AI
+  [ResourceType.GLUE_DATABASE]: "glue.svg",
+  [ResourceType.GLUE_TABLE]: "glue.svg",
+  [ResourceType.GLUE_JOB]: "glue.svg",
+  [ResourceType.GLUE_CRAWLER]: "glue.svg",
+  [ResourceType.ATHENA_WORKGROUP]: "athena.svg",
+  [ResourceType.OPENSEARCH_SERVERLESS_COLLECTION]: "opensearch.svg",
+  [ResourceType.BEDROCK_AGENT]: "bedrock.svg",
+  [ResourceType.BEDROCK_KNOWLEDGE_BASE]: "bedrock.svg",
+  [ResourceType.BEDROCK_DATA_SOURCE]: "bedrock.svg",
+
+  // Backup
+  [ResourceType.BACKUP_PLAN]: "backup.svg",
+  [ResourceType.BACKUP_VAULT]: "backup.svg",
 };

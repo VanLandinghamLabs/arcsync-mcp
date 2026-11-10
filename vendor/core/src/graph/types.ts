@@ -111,12 +111,49 @@ export enum ResourceType {
   // Grouping / containers
   CLOUDFORMATION_STACK = "aws_cloudformation_stack",
 
+  // Management & governance
+  SSM_PARAMETER = "aws_ssm_parameter",
+  SSM_DOCUMENT = "aws_ssm_document",
+  CLOUDWATCH_ALARM = "aws_cloudwatch_metric_alarm",
+  CLOUDWATCH_DASHBOARD = "aws_cloudwatch_dashboard",
+  CLOUDWATCH_LOG_METRIC_FILTER = "aws_cloudwatch_log_metric_filter",
+  CLOUDTRAIL_TRAIL = "aws_cloudtrail",
+  GUARDDUTY_DETECTOR = "aws_guardduty_detector",
+  BUDGETS_BUDGET = "aws_budgets_budget",
+
+  // Analytics
+  GLUE_DATABASE = "aws_glue_catalog_database",
+  GLUE_TABLE = "aws_glue_catalog_table",
+  GLUE_JOB = "aws_glue_job",
+  GLUE_CRAWLER = "aws_glue_crawler",
+  ATHENA_WORKGROUP = "aws_athena_workgroup",
+  OPENSEARCH_SERVERLESS_COLLECTION = "aws_opensearchserverless_collection",
+
+  // Bedrock
+  BEDROCK_AGENT = "aws_bedrockagent_agent",
+  BEDROCK_KNOWLEDGE_BASE = "aws_bedrockagent_knowledge_base",
+  BEDROCK_DATA_SOURCE = "aws_bedrockagent_data_source",
+
+  // EventBridge Scheduler
+  SCHEDULER_SCHEDULE = "aws_scheduler_schedule",
+
+  // Batch
+  BATCH_COMPUTE_ENVIRONMENT = "aws_batch_compute_environment",
+  BATCH_JOB_QUEUE = "aws_batch_job_queue",
+  BATCH_JOB_DEFINITION = "aws_batch_job_definition",
+
+  // Backup
+  BACKUP_PLAN = "aws_backup_plan",
+  BACKUP_VAULT = "aws_backup_vault",
+
   // GCP Compute
   GCP_COMPUTE_INSTANCE = "google_compute_instance",
   GCP_CONTAINER_CLUSTER = "google_container_cluster",
   GCP_CLOUD_RUN_SERVICE = "google_cloud_run_service",
   GCP_CLOUD_FUNCTION = "google_cloudfunctions_function",
   GCP_APP_ENGINE = "google_app_engine_application",
+  GCP_CLOUD_RUN_JOB = "google_cloud_run_v2_job",
+  GCP_WORKFLOW = "google_workflows_workflow",
 
   // GCP Storage
   GCP_STORAGE_BUCKET = "google_storage_bucket",
@@ -126,6 +163,7 @@ export enum ResourceType {
   GCP_FIRESTORE_DATABASE = "google_firestore_database",
   GCP_REDIS_INSTANCE = "google_redis_instance",
   GCP_BIGTABLE_INSTANCE = "google_bigtable_instance",
+  GCP_BIGQUERY_TABLE = "google_bigquery_table",
 
   // GCP Networking
   GCP_COMPUTE_NETWORK = "google_compute_network",
@@ -135,21 +173,34 @@ export enum ResourceType {
   GCP_SECURITY_POLICY = "google_compute_security_policy",
   GCP_COMPUTE_ROUTER = "google_compute_router",
   GCP_COMPUTE_FIREWALL = "google_compute_firewall",
+  GCP_COMPUTE_ADDRESS = "google_compute_address",
+  GCP_DNS_RECORD_SET = "google_dns_record_set",
+  GCP_ROUTER_NAT = "google_compute_router_nat",
+  GCP_VPC_ACCESS_CONNECTOR = "google_vpc_access_connector",
+  GCP_BACKEND_SERVICE = "google_compute_backend_service",
 
   // GCP Messaging
   GCP_PUBSUB_TOPIC = "google_pubsub_topic",
   GCP_PUBSUB_SUBSCRIPTION = "google_pubsub_subscription",
   GCP_EVENTARC_TRIGGER = "google_eventarc_trigger",
+  GCP_CLOUD_SCHEDULER_JOB = "google_cloud_scheduler_job",
+  GCP_CLOUD_TASKS_QUEUE = "google_cloud_tasks_queue",
 
   // GCP Security
   GCP_IAM_BINDING = "google_project_iam_binding",
   GCP_IAM_MEMBER = "google_project_iam_member",
   GCP_SERVICE_ACCOUNT = "google_service_account",
   GCP_KMS_KEY = "google_kms_crypto_key",
+  GCP_SECRET_MANAGER_SECRET = "google_secret_manager_secret",
 
   // GCP API
   GCP_API_GATEWAY = "google_api_gateway_api",
   GCP_ENDPOINTS_SERVICE = "google_endpoints_service",
+
+  // GCP DevOps & operations
+  GCP_ARTIFACT_REGISTRY_REPOSITORY = "google_artifact_registry_repository",
+  GCP_CLOUD_BUILD_TRIGGER = "google_cloudbuild_trigger",
+  GCP_LOGGING_SINK = "google_logging_project_sink",
 
   // Azure Compute
   AZURE_VIRTUAL_MACHINE = "azurerm_virtual_machine",
@@ -159,6 +210,9 @@ export enum ResourceType {
   AZURE_KUBERNETES_CLUSTER = "azurerm_kubernetes_cluster",
   AZURE_CONTAINER_GROUP = "azurerm_container_group",
   AZURE_APP_SERVICE = "azurerm_app_service",
+  AZURE_APP_SERVICE_PLAN = "azurerm_service_plan",
+  AZURE_AVAILABILITY_SET = "azurerm_availability_set",
+  AZURE_CONTAINER_REGISTRY = "azurerm_container_registry",
 
   // Azure Storage
   AZURE_STORAGE_ACCOUNT = "azurerm_storage_account",
@@ -166,6 +220,8 @@ export enum ResourceType {
   AZURE_SQL_DATABASE = "azurerm_mssql_database",
   AZURE_SQL_SERVER = "azurerm_mssql_server",
   AZURE_REDIS_CACHE = "azurerm_redis_cache",
+  AZURE_STORAGE_CONTAINER = "azurerm_storage_container",
+  AZURE_POSTGRESQL_FLEXIBLE_SERVER = "azurerm_postgresql_flexible_server",
 
   // Azure Networking
   AZURE_VIRTUAL_NETWORK = "azurerm_virtual_network",
@@ -175,6 +231,14 @@ export enum ResourceType {
   AZURE_DNS_ZONE = "azurerm_dns_zone",
   AZURE_FRONTDOOR = "azurerm_frontdoor",
   AZURE_NSG = "azurerm_network_security_group",
+  AZURE_PUBLIC_IP = "azurerm_public_ip",
+  AZURE_NETWORK_INTERFACE = "azurerm_network_interface",
+  AZURE_PRIVATE_ENDPOINT = "azurerm_private_endpoint",
+  AZURE_PRIVATE_DNS_ZONE = "azurerm_private_dns_zone",
+  AZURE_ROUTE_TABLE = "azurerm_route_table",
+  AZURE_NAT_GATEWAY = "azurerm_nat_gateway",
+  AZURE_BASTION_HOST = "azurerm_bastion_host",
+  AZURE_VNET_GATEWAY = "azurerm_virtual_network_gateway",
 
   // Azure Security
   AZURE_KEY_VAULT = "azurerm_key_vault",
@@ -187,12 +251,20 @@ export enum ResourceType {
   AZURE_SERVICEBUS_TOPIC = "azurerm_servicebus_topic",
   AZURE_EVENTGRID_TOPIC = "azurerm_eventgrid_topic",
   AZURE_EVENTHUB_NAMESPACE = "azurerm_eventhub_namespace",
+  AZURE_EVENTGRID_SYSTEM_TOPIC = "azurerm_eventgrid_system_topic",
+
+  // Azure Monitoring
+  AZURE_LOG_ANALYTICS_WORKSPACE = "azurerm_log_analytics_workspace",
+  AZURE_APPLICATION_INSIGHTS = "azurerm_application_insights",
+  AZURE_MONITOR_ACTION_GROUP = "azurerm_monitor_action_group",
+  AZURE_MONITOR_ALERT = "azurerm_monitor_metric_alert",
 
   // Azure API
   AZURE_API_MANAGEMENT = "azurerm_api_management",
 
   // Azure Grouping
   AZURE_RESOURCE_GROUP = "azurerm_resource_group",
+  AZURE_DEPLOYMENT = "azurerm_resource_group_template_deployment",
 
   // Synthetic node type: an event/message type extracted from IaC event
   // semantics (EventBridge patterns, SNS filter policies). Never emitted by
@@ -612,7 +684,12 @@ export interface ResourceEdge {
  * `instanceProfile` is deliberately absent: a profile folds to a RAIL only and
  * mints no edge, so no edge can carry it.
  */
-export type NetworkGlueKind = "routeTableAssociation" | "route" | "gatewayAttachment";
+export type NetworkGlueKind =
+  | "routeTableAssociation"
+  | "route"
+  | "gatewayAttachment"
+  | "securityGroupRule"
+  | "listener";
 
 export interface GraphMetadata {
   source: ProjectType;

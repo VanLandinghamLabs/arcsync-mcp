@@ -103,6 +103,31 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.ECR_REPOSITORY]: "infra",
   [ResourceType.CODEPIPELINE_PIPELINE]: "infra",
   [ResourceType.CODEBUILD_PROJECT]: "infra",
+  [ResourceType.SSM_PARAMETER]: "infra",
+  [ResourceType.SSM_DOCUMENT]: "infra",
+  [ResourceType.CLOUDWATCH_ALARM]: "infra",
+  [ResourceType.CLOUDWATCH_DASHBOARD]: "infra",
+  [ResourceType.CLOUDWATCH_LOG_METRIC_FILTER]: "infra",
+  [ResourceType.BUDGETS_BUDGET]: "infra",
+
+  // AWS additions by family
+  [ResourceType.CLOUDTRAIL_TRAIL]: "security",
+  [ResourceType.GUARDDUTY_DETECTOR]: "security",
+  [ResourceType.GLUE_DATABASE]: "storage",
+  [ResourceType.GLUE_TABLE]: "storage",
+  [ResourceType.GLUE_JOB]: "compute",
+  [ResourceType.GLUE_CRAWLER]: "compute",
+  [ResourceType.ATHENA_WORKGROUP]: "compute",
+  [ResourceType.OPENSEARCH_SERVERLESS_COLLECTION]: "storage",
+  [ResourceType.BEDROCK_AGENT]: "compute",
+  [ResourceType.BEDROCK_KNOWLEDGE_BASE]: "storage",
+  [ResourceType.BEDROCK_DATA_SOURCE]: "storage",
+  [ResourceType.SCHEDULER_SCHEDULE]: "events",
+  [ResourceType.BATCH_COMPUTE_ENVIRONMENT]: "compute",
+  [ResourceType.BATCH_JOB_QUEUE]: "compute",
+  [ResourceType.BATCH_JOB_DEFINITION]: "compute",
+  [ResourceType.BACKUP_PLAN]: "storage",
+  [ResourceType.BACKUP_VAULT]: "storage",
 
   // GCP Compute (blue)
   [ResourceType.GCP_COMPUTE_INSTANCE]: "compute",
@@ -110,6 +135,8 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.GCP_CLOUD_RUN_SERVICE]: "compute",
   [ResourceType.GCP_CLOUD_FUNCTION]: "compute",
   [ResourceType.GCP_APP_ENGINE]: "compute",
+  [ResourceType.GCP_CLOUD_RUN_JOB]: "compute",
+  [ResourceType.GCP_WORKFLOW]: "compute",
 
   // GCP Storage (green)
   [ResourceType.GCP_STORAGE_BUCKET]: "storage",
@@ -119,6 +146,7 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.GCP_FIRESTORE_DATABASE]: "storage",
   [ResourceType.GCP_REDIS_INSTANCE]: "storage",
   [ResourceType.GCP_BIGTABLE_INSTANCE]: "storage",
+  [ResourceType.GCP_BIGQUERY_TABLE]: "storage",
 
   // GCP Networking (orange)
   [ResourceType.GCP_COMPUTE_NETWORK]: "networking",
@@ -128,19 +156,32 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.GCP_SECURITY_POLICY]: "networking",
   [ResourceType.GCP_COMPUTE_ROUTER]: "networking",
   [ResourceType.GCP_COMPUTE_FIREWALL]: "networking",
+  [ResourceType.GCP_COMPUTE_ADDRESS]: "networking",
+  [ResourceType.GCP_DNS_RECORD_SET]: "networking",
+  [ResourceType.GCP_ROUTER_NAT]: "networking",
+  [ResourceType.GCP_VPC_ACCESS_CONNECTOR]: "networking",
+  [ResourceType.GCP_BACKEND_SERVICE]: "networking",
   [ResourceType.GCP_API_GATEWAY]: "networking",
   [ResourceType.GCP_ENDPOINTS_SERVICE]: "networking",
+
+  // GCP DevOps & operations
+  [ResourceType.GCP_ARTIFACT_REGISTRY_REPOSITORY]: "infra",
+  [ResourceType.GCP_CLOUD_BUILD_TRIGGER]: "infra",
+  [ResourceType.GCP_LOGGING_SINK]: "infra",
 
   // GCP Messaging (amber)
   [ResourceType.GCP_PUBSUB_TOPIC]: "messaging",
   [ResourceType.GCP_PUBSUB_SUBSCRIPTION]: "messaging",
   [ResourceType.GCP_EVENTARC_TRIGGER]: "messaging",
+  [ResourceType.GCP_CLOUD_SCHEDULER_JOB]: "events",
+  [ResourceType.GCP_CLOUD_TASKS_QUEUE]: "messaging",
 
   // GCP Security (purple)
   [ResourceType.GCP_IAM_BINDING]: "security",
   [ResourceType.GCP_IAM_MEMBER]: "security",
   [ResourceType.GCP_SERVICE_ACCOUNT]: "security",
   [ResourceType.GCP_KMS_KEY]: "security",
+  [ResourceType.GCP_SECRET_MANAGER_SECRET]: "security",
 
   // Azure Compute (blue)
   [ResourceType.AZURE_VIRTUAL_MACHINE]: "compute",
@@ -150,6 +191,9 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.AZURE_KUBERNETES_CLUSTER]: "compute",
   [ResourceType.AZURE_CONTAINER_GROUP]: "compute",
   [ResourceType.AZURE_APP_SERVICE]: "compute",
+  [ResourceType.AZURE_APP_SERVICE_PLAN]: "compute",
+  [ResourceType.AZURE_AVAILABILITY_SET]: "compute",
+  [ResourceType.AZURE_CONTAINER_REGISTRY]: "storage",
 
   // Azure Storage (green)
   [ResourceType.AZURE_STORAGE_ACCOUNT]: "storage",
@@ -157,6 +201,8 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.AZURE_SQL_DATABASE]: "storage",
   [ResourceType.AZURE_SQL_SERVER]: "storage",
   [ResourceType.AZURE_REDIS_CACHE]: "storage",
+  [ResourceType.AZURE_STORAGE_CONTAINER]: "storage",
+  [ResourceType.AZURE_POSTGRESQL_FLEXIBLE_SERVER]: "storage",
 
   // Azure Networking (orange)
   [ResourceType.AZURE_VIRTUAL_NETWORK]: "networking",
@@ -166,6 +212,14 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.AZURE_DNS_ZONE]: "networking",
   [ResourceType.AZURE_FRONTDOOR]: "networking",
   [ResourceType.AZURE_NSG]: "networking",
+  [ResourceType.AZURE_PUBLIC_IP]: "networking",
+  [ResourceType.AZURE_NETWORK_INTERFACE]: "networking",
+  [ResourceType.AZURE_PRIVATE_ENDPOINT]: "networking",
+  [ResourceType.AZURE_PRIVATE_DNS_ZONE]: "networking",
+  [ResourceType.AZURE_ROUTE_TABLE]: "networking",
+  [ResourceType.AZURE_NAT_GATEWAY]: "networking",
+  [ResourceType.AZURE_BASTION_HOST]: "networking",
+  [ResourceType.AZURE_VNET_GATEWAY]: "networking",
   [ResourceType.AZURE_API_MANAGEMENT]: "networking",
 
   // Azure Security (purple)
@@ -179,9 +233,17 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.AZURE_SERVICEBUS_TOPIC]: "events",
   [ResourceType.AZURE_EVENTGRID_TOPIC]: "events",
   [ResourceType.AZURE_EVENTHUB_NAMESPACE]: "events",
+  [ResourceType.AZURE_EVENTGRID_SYSTEM_TOPIC]: "events",
+
+  // Azure Monitoring (slate)
+  [ResourceType.AZURE_LOG_ANALYTICS_WORKSPACE]: "infra",
+  [ResourceType.AZURE_APPLICATION_INSIGHTS]: "infra",
+  [ResourceType.AZURE_MONITOR_ACTION_GROUP]: "infra",
+  [ResourceType.AZURE_MONITOR_ALERT]: "infra",
 
   // Azure Grouping (slate)
   [ResourceType.AZURE_RESOURCE_GROUP]: "infra",
+  [ResourceType.AZURE_DEPLOYMENT]: "infra",
 };
 
 /**

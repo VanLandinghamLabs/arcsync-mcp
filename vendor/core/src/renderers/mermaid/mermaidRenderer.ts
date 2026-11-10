@@ -102,6 +102,29 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.CODEBUILD_PROJECT]: "CodeBuild",
   [ResourceType.APPSYNC_API]: "AppSync",
   [ResourceType.CLOUDFORMATION_STACK]: "Stack",
+  [ResourceType.SSM_PARAMETER]: "SSM Parameter",
+  [ResourceType.SSM_DOCUMENT]: "SSM Document",
+  [ResourceType.CLOUDWATCH_ALARM]: "CloudWatch Alarm",
+  [ResourceType.CLOUDWATCH_DASHBOARD]: "CloudWatch Dashboard",
+  [ResourceType.CLOUDWATCH_LOG_METRIC_FILTER]: "Metric Filter",
+  [ResourceType.CLOUDTRAIL_TRAIL]: "CloudTrail",
+  [ResourceType.GUARDDUTY_DETECTOR]: "GuardDuty",
+  [ResourceType.BUDGETS_BUDGET]: "Budget",
+  [ResourceType.GLUE_DATABASE]: "Glue Database",
+  [ResourceType.GLUE_TABLE]: "Glue Table",
+  [ResourceType.GLUE_JOB]: "Glue Job",
+  [ResourceType.GLUE_CRAWLER]: "Glue Crawler",
+  [ResourceType.ATHENA_WORKGROUP]: "Athena Workgroup",
+  [ResourceType.OPENSEARCH_SERVERLESS_COLLECTION]: "OpenSearch Serverless",
+  [ResourceType.BEDROCK_AGENT]: "Bedrock Agent",
+  [ResourceType.BEDROCK_KNOWLEDGE_BASE]: "Knowledge Base",
+  [ResourceType.BEDROCK_DATA_SOURCE]: "Bedrock Data Source",
+  [ResourceType.SCHEDULER_SCHEDULE]: "Schedule",
+  [ResourceType.BATCH_COMPUTE_ENVIRONMENT]: "Batch Compute Env",
+  [ResourceType.BATCH_JOB_QUEUE]: "Batch Job Queue",
+  [ResourceType.BATCH_JOB_DEFINITION]: "Batch Job Definition",
+  [ResourceType.BACKUP_PLAN]: "Backup Plan",
+  [ResourceType.BACKUP_VAULT]: "Backup Vault",
 
   // GCP Compute
   [ResourceType.GCP_COMPUTE_INSTANCE]: "GCE Instance",
@@ -109,6 +132,8 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.GCP_CLOUD_RUN_SERVICE]: "Cloud Run",
   [ResourceType.GCP_CLOUD_FUNCTION]: "Cloud Function",
   [ResourceType.GCP_APP_ENGINE]: "App Engine",
+  [ResourceType.GCP_CLOUD_RUN_JOB]: "Cloud Run Job",
+  [ResourceType.GCP_WORKFLOW]: "Workflow",
 
   // GCP Storage
   [ResourceType.GCP_STORAGE_BUCKET]: "GCS Bucket",
@@ -118,6 +143,7 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.GCP_FIRESTORE_DATABASE]: "Firestore",
   [ResourceType.GCP_REDIS_INSTANCE]: "Memorystore",
   [ResourceType.GCP_BIGTABLE_INSTANCE]: "Bigtable",
+  [ResourceType.GCP_BIGQUERY_TABLE]: "BigQuery Table",
 
   // GCP Networking
   [ResourceType.GCP_COMPUTE_NETWORK]: "VPC Network",
@@ -127,21 +153,34 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.GCP_SECURITY_POLICY]: "Cloud Armor",
   [ResourceType.GCP_COMPUTE_ROUTER]: "Cloud Router",
   [ResourceType.GCP_COMPUTE_FIREWALL]: "Firewall Rule",
+  [ResourceType.GCP_COMPUTE_ADDRESS]: "IP Address",
+  [ResourceType.GCP_DNS_RECORD_SET]: "DNS Record",
+  [ResourceType.GCP_ROUTER_NAT]: "Cloud NAT",
+  [ResourceType.GCP_VPC_ACCESS_CONNECTOR]: "VPC Connector",
+  [ResourceType.GCP_BACKEND_SERVICE]: "Backend Service",
 
   // GCP Messaging
   [ResourceType.GCP_PUBSUB_TOPIC]: "Pub/Sub Topic",
   [ResourceType.GCP_PUBSUB_SUBSCRIPTION]: "Pub/Sub Sub",
   [ResourceType.GCP_EVENTARC_TRIGGER]: "Eventarc Trigger",
+  [ResourceType.GCP_CLOUD_SCHEDULER_JOB]: "Scheduler Job",
+  [ResourceType.GCP_CLOUD_TASKS_QUEUE]: "Tasks Queue",
 
   // GCP Security
   [ResourceType.GCP_IAM_BINDING]: "IAM Binding",
   [ResourceType.GCP_IAM_MEMBER]: "IAM Member",
   [ResourceType.GCP_SERVICE_ACCOUNT]: "Service Account",
   [ResourceType.GCP_KMS_KEY]: "KMS Key",
+  [ResourceType.GCP_SECRET_MANAGER_SECRET]: "Secret",
 
   // GCP API
   [ResourceType.GCP_API_GATEWAY]: "API Gateway",
   [ResourceType.GCP_ENDPOINTS_SERVICE]: "Endpoints",
+
+  // GCP DevOps & operations
+  [ResourceType.GCP_ARTIFACT_REGISTRY_REPOSITORY]: "Artifact Registry",
+  [ResourceType.GCP_CLOUD_BUILD_TRIGGER]: "Cloud Build Trigger",
+  [ResourceType.GCP_LOGGING_SINK]: "Log Sink",
 
   // Azure Compute
   [ResourceType.AZURE_VIRTUAL_MACHINE]: "Azure VM",
@@ -151,6 +190,9 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.AZURE_KUBERNETES_CLUSTER]: "AKS",
   [ResourceType.AZURE_CONTAINER_GROUP]: "Container Group",
   [ResourceType.AZURE_APP_SERVICE]: "App Service",
+  [ResourceType.AZURE_APP_SERVICE_PLAN]: "App Service Plan",
+  [ResourceType.AZURE_AVAILABILITY_SET]: "Availability Set",
+  [ResourceType.AZURE_CONTAINER_REGISTRY]: "Container Registry",
 
   // Azure Storage
   [ResourceType.AZURE_STORAGE_ACCOUNT]: "Storage Account",
@@ -158,6 +200,8 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.AZURE_SQL_DATABASE]: "SQL Database",
   [ResourceType.AZURE_SQL_SERVER]: "SQL Server",
   [ResourceType.AZURE_REDIS_CACHE]: "Redis Cache",
+  [ResourceType.AZURE_STORAGE_CONTAINER]: "Blob Container",
+  [ResourceType.AZURE_POSTGRESQL_FLEXIBLE_SERVER]: "PostgreSQL",
 
   // Azure Networking
   [ResourceType.AZURE_VIRTUAL_NETWORK]: "VNet",
@@ -167,6 +211,14 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.AZURE_DNS_ZONE]: "DNS Zone",
   [ResourceType.AZURE_FRONTDOOR]: "Front Door",
   [ResourceType.AZURE_NSG]: "NSG",
+  [ResourceType.AZURE_PUBLIC_IP]: "Public IP",
+  [ResourceType.AZURE_NETWORK_INTERFACE]: "NIC",
+  [ResourceType.AZURE_PRIVATE_ENDPOINT]: "Private Endpoint",
+  [ResourceType.AZURE_PRIVATE_DNS_ZONE]: "Private DNS Zone",
+  [ResourceType.AZURE_ROUTE_TABLE]: "Route Table",
+  [ResourceType.AZURE_NAT_GATEWAY]: "NAT Gateway",
+  [ResourceType.AZURE_BASTION_HOST]: "Bastion",
+  [ResourceType.AZURE_VNET_GATEWAY]: "VNet Gateway",
 
   // Azure Security
   [ResourceType.AZURE_KEY_VAULT]: "Key Vault",
@@ -179,12 +231,20 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.AZURE_SERVICEBUS_TOPIC]: "Service Bus Topic",
   [ResourceType.AZURE_EVENTGRID_TOPIC]: "Event Grid",
   [ResourceType.AZURE_EVENTHUB_NAMESPACE]: "Event Hub",
+  [ResourceType.AZURE_EVENTGRID_SYSTEM_TOPIC]: "System Topic",
+
+  // Azure Monitoring
+  [ResourceType.AZURE_LOG_ANALYTICS_WORKSPACE]: "Log Analytics",
+  [ResourceType.AZURE_APPLICATION_INSIGHTS]: "App Insights",
+  [ResourceType.AZURE_MONITOR_ACTION_GROUP]: "Action Group",
+  [ResourceType.AZURE_MONITOR_ALERT]: "Alert Rule",
 
   // Azure API
   [ResourceType.AZURE_API_MANAGEMENT]: "API Management",
 
   // Azure Grouping
   [ResourceType.AZURE_RESOURCE_GROUP]: "Resource Group",
+  [ResourceType.AZURE_DEPLOYMENT]: "Deployment",
 
   [ResourceType.EVENT_TYPE]: "Event",
   [ResourceType.AUTHORED]: "Node",
@@ -339,7 +399,10 @@ function arcsyncIcon(node: ResourceNode): string | undefined {
   if (isAuthored(node)) return stringAttr(node, "icon");
   // Every engine's per-directory grouping is a CLOUDFORMATION_STACK node, so
   // its CloudFormation icon would mislabel a Terraform or Pulumi stack.
-  if (node.type === ResourceType.CLOUDFORMATION_STACK) return undefined;
+  // An unknown node's icon is a display guess from its raw type; written here it
+  // would reimport as that service's type and classify the node.
+  if (node.type === ResourceType.CLOUDFORMATION_STACK || node.type === ResourceType.UNKNOWN)
+    return undefined;
   return iconSubpathForNode(node)
     ?.replace("/", ":")
     .replace(/\.svg$/, "");
@@ -402,8 +465,8 @@ function arcsyncMeta(node: ResourceNode, label?: string): string {
 /**
  * The rail tags this renderer draws.
  *
- * ONLY the two `foldNetworkGlue` produces, because that is the only fold this
- * renderer runs. A node reaching `renderMermaid` on the shipping path has
+ * ONLY the ones `foldNetworkGlue` and `foldEventLeftovers` produce, the folds
+ * this renderer runs, so a folded join or subscription still shows. A node reaching `renderMermaid` on the shipping path has
  * already been through `filterGraphForDisplay`, which stamps a `LOGS` rail on
  * every owner of a hidden log group — so rendering rails unconditionally put
  * `↳ LOGS Logs` on every Lambda in every PR comment and every `arcsync
@@ -411,7 +474,15 @@ function arcsyncMeta(node: ResourceNode, label?: string): string {
  * do with, and the name it prints is the log group's LOGICAL ID, which reads as
  * noise inline where it reads fine beside the card it hangs off on the canvas.
  */
-const MERMAID_RAIL_LABELS: ReadonlySet<string> = new Set(["ROUTE", "PROFILE"]);
+const MERMAID_RAIL_LABELS: ReadonlySet<string> = new Set([
+  "ROUTE",
+  "PROFILE",
+  "INGRESS",
+  "EGRESS",
+  "LISTENER",
+  "SUB",
+  "TARGET",
+]);
 
 /**
  * The folded rails a card draws as strips, as extra lines under the node's

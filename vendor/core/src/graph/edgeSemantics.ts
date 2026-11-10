@@ -189,6 +189,8 @@ export const FOLD_VERBS: Record<NetworkGlueKind, string> = {
   routeTableAssociation: "routes via",
   route: "routes",
   gatewayAttachment: "attaches",
+  securityGroupRule: "connects",
+  listener: "forwards",
 };
 
 /** Sources whose outbound edge has a name the topology alone establishes. */

@@ -1,5 +1,11 @@
 import { FOLD_VERBS } from "./edgeSemantics.js";
-import { fallbackRailFor, railLabelFor, readAttributeEntry } from "./fallbackRail.js";
+import {
+  fallbackRailFor,
+  namesNode,
+  railLabelFor,
+  readAttributeEntry,
+  referenceToken,
+} from "./fallbackRail.js";
 import { lookupByType } from "./typeLookup.js";
 import type {
   ArchGraph,
@@ -117,6 +123,19 @@ const GLUE_KIND_BY_RESOURCE_TYPE: Readonly<Record<string, GlueKind>> = {
   "AWS::IAM::InstanceProfile": "instanceProfile",
   aws_iam_instance_profile: "instanceProfile",
   "aws:iam/instanceProfile:InstanceProfile": "instanceProfile",
+  "AWS::EC2::SecurityGroupIngress": "securityGroupRule",
+  "AWS::EC2::SecurityGroupEgress": "securityGroupRule",
+  aws_security_group_rule: "securityGroupRule",
+  aws_vpc_security_group_ingress_rule: "securityGroupRule",
+  aws_vpc_security_group_egress_rule: "securityGroupRule",
+  "aws:ec2/securityGroupRule:SecurityGroupRule": "securityGroupRule",
+  "aws:vpc/securityGroupIngressRule:SecurityGroupIngressRule": "securityGroupRule",
+  "aws:vpc/securityGroupEgressRule:SecurityGroupEgressRule": "securityGroupRule",
+  "AWS::ElasticLoadBalancingV2::Listener": "listener",
+  aws_lb_listener: "listener",
+  aws_alb_listener: "listener",
+  "aws:lb/listener:Listener": "listener",
+  "aws:alb/listener:Listener": "listener",
 };
 
 /**
@@ -144,6 +163,8 @@ const PARENT_TYPE_BY_KIND: Record<GlueKind, ResourceType> = {
   route: ResourceType.EC2_ROUTE_TABLE,
   gatewayAttachment: ResourceType.EC2_VPC,
   instanceProfile: ResourceType.EC2_INSTANCE,
+  securityGroupRule: ResourceType.EC2_SECURITY_GROUP,
+  listener: ResourceType.ELB_LOAD_BALANCER,
 };
 
 /** Whether an edge participates in the "would folding strand anything?" test.
@@ -320,7 +341,10 @@ export function foldNetworkGlue(graph: ArchGraph, options?: FoldNetworkGlueOptio
     if (containerIds.has(node.id)) continue;
 
     const structural = (neighbours.get(node.id) ?? []).filter((n) => isStructural(n.edge));
-    const parent = structural.find((n) => n.node.type === PARENT_TYPE_BY_KIND[kind])?.node;
+    const parent =
+      kind === "securityGroupRule"
+        ? securityGroupRuleOwner(node, structural)
+        : structural.find((n) => n.node.type === PARENT_TYPE_BY_KIND[kind])?.node;
     // Fold only into a parent that survived filtering. Otherwise the join stays
     // — classified, so it draws as a real networking card rather than a grey
     // one, but unfolded, because there is nothing left to fold it onto.
@@ -357,7 +381,7 @@ export function foldNetworkGlue(graph: ArchGraph, options?: FoldNetworkGlueOptio
   // and the two kinds are swept separately so a profile declared between two
   // routes cannot land between their rails.
   const railsByParent = new Map<string, FallbackRail[]>();
-  for (const kind of ["route", "instanceProfile"] as const) {
+  for (const kind of ["route", "instanceProfile", "securityGroupRule", "listener"] as const) {
     for (const fold of folds) {
       if (fold.kind !== kind || !fold.rail) continue;
       const rails = railsByParent.get(fold.parent.id);
@@ -508,6 +532,9 @@ function resolveFold(
     return { glue, kind, parent, rail: profileRail(glue, other) };
   }
 
+  if (kind === "securityGroupRule") return securityGroupRuleFold(glue, parent, other);
+  if (kind === "listener") return listenerFold(glue, parent, other);
+
   const destination = attributeUnder(glue.attributes, ROUTE_DESTINATION_KEYS);
   const cidr = destination ? railValue(destination.value) : undefined;
   return {
@@ -563,4 +590,155 @@ function profileRail(glue: ResourceNode, role: ResourceNode | undefined): Fallba
     if (value) policy.push(`${found.key} ${value}`);
   }
   return fallbackRailFor(glue, railLabelFor("instanceprofile"), policy);
+}
+
+/** The rule's own group, and the group on its other side. A rule between two
+ * groups references both, so type alone cannot say which one owns it. */
+const SG_OWNER_KEYS: readonly string[] = ["groupid", "securitygroupid"];
+const SG_PEER_KEYS: readonly string[] = [
+  "sourcesecuritygroupid",
+  "destinationsecuritygroupid",
+  "referencedsecuritygroupid",
+];
+const SG_CIDR_KEYS: readonly string[] = [
+  "cidrip",
+  "cidripv6",
+  "cidrblocks",
+  "ipv6cidrblocks",
+  "cidripv4",
+  "sourceprefixlistid",
+  "destinationprefixlistid",
+  "prefixlistids",
+  "prefixlistid",
+];
+
+function securityGroupRuleOwner(
+  rule: ResourceNode,
+  structural: readonly Neighbour[],
+): ResourceNode | undefined {
+  const groups = [
+    ...new Set(
+      structural.filter((n) => n.node.type === ResourceType.EC2_SECURITY_GROUP).map((n) => n.node),
+    ),
+  ];
+  if (groups.length === 0) return undefined;
+  const ownerToken = referenceToken(attributeUnder(rule.attributes, SG_OWNER_KEYS)?.value);
+  const named = ownerToken ? groups.find((g) => namesNode(ownerToken, g)) : undefined;
+  if (named) return named;
+  if (groups.length !== 1) return undefined;
+  // One group, and an owner reference that names nothing on the graph: still
+  // the owner, unless the peer reference is the one that names it.
+  const peerToken = referenceToken(attributeUnder(rule.attributes, SG_PEER_KEYS)?.value);
+  return ownerToken && peerToken && namesNode(peerToken, groups[0]) ? undefined : groups[0];
+}
+
+/** Whether a rule lets traffic out rather than in. One Terraform type covers
+ * both and says which in its `type` attribute. */
+function isEgressRule(rule: ResourceNode): boolean {
+  const raw = rule.resourceType ?? "";
+  if (/egress/i.test(raw)) return true;
+  if (/ingress/i.test(raw)) return false;
+  return attributeUnder(rule.attributes, ["type"])?.value === "egress";
+}
+
+/** `tcp 5432`, `all`, `tcp 8000-8080`. */
+function trafficOf(rule: ResourceNode): string {
+  const protocol = railValue(attributeUnder(rule.attributes, ["ipprotocol", "protocol"])?.value);
+  const from = railValue(attributeUnder(rule.attributes, ["fromport"])?.value);
+  const to = railValue(attributeUnder(rule.attributes, ["toport"])?.value);
+  const allTraffic = protocol === "-1" || protocol?.toLowerCase() === "all";
+  const ports = allTraffic || !from ? undefined : !to || to === from ? from : `${from}-${to}`;
+  return [allTraffic ? "all" : protocol?.toLowerCase(), ports].filter(Boolean).join(" ");
+}
+
+function securityGroupRuleFold(
+  glue: ResourceNode,
+  parent: ResourceNode,
+  other: ResourceNode | undefined,
+): Fold | undefined {
+  if (other && other.type !== ResourceType.EC2_SECURITY_GROUP) return undefined;
+  const egress = isEgressRule(glue);
+  const traffic = trafficOf(glue);
+  const cidr = attributeUnder(glue.attributes, SG_CIDR_KEYS);
+  const cidrValue = cidr ? railValue(cidr.value) : undefined;
+  const peerToken = referenceToken(attributeUnder(glue.attributes, SG_PEER_KEYS)?.value);
+  // A group that admits itself reaches no second node, so `other` is empty.
+  const self = !other && peerToken !== undefined && namesNode(peerToken, parent);
+  const peer = other?.name ?? (self ? parent.name : cidrValue);
+  const name = [traffic, peer ? `${egress ? "→" : "←"} ${peer}` : undefined]
+    .filter(Boolean)
+    .join(" ");
+  const policy: string[] = [];
+  const description = attributeUnder(glue.attributes, ["description"]);
+  const descriptionValue = description ? railValue(description.value) : undefined;
+  if (description && descriptionValue) policy.push(`${description.key} ${descriptionValue}`);
+  if (traffic) policy.push(traffic);
+  if (cidr && cidrValue) policy.push(`${cidr.key} ${cidrValue}`);
+  const rail = fallbackRailFor(
+    glue,
+    railLabelFor(egress ? "egress" : "ingress"),
+    policy,
+    name || undefined,
+  );
+  if (!other) return { glue, kind: "securityGroupRule", parent, rail };
+  return {
+    glue,
+    kind: "securityGroupRule",
+    parent,
+    rail,
+    // Drawn the way traffic flows, so an ingress rule on the database's group
+    // from the service's group and the service group's matching egress rule
+    // resolve to one pair and merge into one edge.
+    mint: {
+      source: egress ? parent.id : other.id,
+      target: egress ? other.id : parent.id,
+      verb: FOLD_VERBS.securityGroupRule,
+      detail: traffic || undefined,
+      via: "securityGroupRule",
+    },
+  };
+}
+
+/** Target groups have no `ResourceType` of their own, so a listener's one
+ * permitted neighbour besides its load balancer is matched by raw type. */
+const TARGET_GROUP_TYPES: ReadonlySet<string> = new Set([
+  "AWS::ElasticLoadBalancingV2::TargetGroup",
+  "aws_lb_target_group",
+  "aws_alb_target_group",
+  "aws:lb/targetGroup:TargetGroup",
+  "aws:alb/targetGroup:TargetGroup",
+]);
+
+/** `LISTENER` rail reading `HTTPS 443`, plus a `LB -> target group` edge for
+ * the default forward. A listener reaching anything else (a certificate, an
+ * alarm, a rule) keeps its card: this pass has no verb for those. */
+function listenerFold(
+  glue: ResourceNode,
+  parent: ResourceNode,
+  other: ResourceNode | undefined,
+): Fold | undefined {
+  if (other && !TARGET_GROUP_TYPES.has(other.resourceType ?? "")) return undefined;
+  const protocol = attributeUnder(glue.attributes, ["protocol"]);
+  const port = attributeUnder(glue.attributes, ["port"]);
+  const protocolValue = protocol ? railValue(protocol.value) : undefined;
+  const portValue = port ? railValue(port.value) : undefined;
+  const policy: string[] = [];
+  if (protocol && protocolValue) policy.push(`${protocol.key} ${protocolValue}`);
+  if (port && portValue) policy.push(`${port.key} ${portValue}`);
+  const detail = [protocolValue, portValue].filter(Boolean).join(" ");
+  const rail = fallbackRailFor(glue, railLabelFor("listener"), policy, detail || undefined);
+  if (!other) return { glue, kind: "listener", parent, rail };
+  return {
+    glue,
+    kind: "listener",
+    parent,
+    rail,
+    mint: {
+      source: parent.id,
+      target: other.id,
+      verb: FOLD_VERBS.listener,
+      detail: detail || undefined,
+      via: "listener",
+    },
+  };
 }
