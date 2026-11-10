@@ -49,17 +49,32 @@ afterEach(async () => {
   client = null;
 });
 
+const CANON_FIELDS = {
+  displayOwner: "acme",
+  displayRepo: "infra",
+  branch: "main",
+  projectType: "terraform",
+  provider: "aws",
+  lastParsedAt: "2026-10-01T00:00:00.000Z",
+};
+
+/** A CANON read: the row nested under `canonical`. */
 const canon = (extra: Record<string, unknown> = {}) => ({
   graphId: "g1",
   graphData: sampleGraph(),
-  canonical: {
-    displayOwner: "acme",
-    displayRepo: "infra",
-    branch: "main",
-    projectType: "terraform",
-    provider: "aws",
-    lastParsedAt: "2026-10-01T00:00:00.000Z",
-  },
+  canonical: CANON_FIELDS,
+  ...extra,
+});
+
+/** A start_parse id followed to its CANON: the row spread at the top level. */
+const seed = (extra: Record<string, unknown> = {}) => ({
+  graphId: "job1",
+  ...CANON_FIELDS,
+  graphData: sampleGraph(),
+  canonicalGraphId: "g1",
+  repoInfo: {},
+  access: "member",
+  role: "owner",
   ...extra,
 });
 
@@ -174,11 +189,7 @@ describe("arcsync MCP server", () => {
 
     it("cuts oversized JSON and points at the canonical canvas", async () => {
       const { call } = await connect({
-        "GET /graphs/job1": () =>
-          canon({
-            canonicalGraphId: "g1",
-            graphData: { ...sampleGraph(), nodes: manyNodes() },
-          }),
+        "GET /graphs/job1": () => seed({ graphData: { ...sampleGraph(), nodes: manyNodes() } }),
       });
       const { text } = await call("get_diagram", { graphId: "job1", format: "json" });
       expectTruncated(text, "https://arcsync.dev/canvas/g1");
@@ -187,7 +198,7 @@ describe("arcsync MCP server", () => {
 
     it("reports the canonical graphId when given the id start_parse returned", async () => {
       const { call } = await connect({
-        "GET /graphs/job1": () => canon({ graphId: "job1", canonicalGraphId: "g1" }),
+        "GET /graphs/job1": () => seed(),
       });
       const out = JSON.parse((await call("get_diagram", { graphId: "job1", format: "json" })).text);
       expect(out).toMatchObject({ graphId: "g1", canvasUrl: "https://arcsync.dev/canvas/g1" });

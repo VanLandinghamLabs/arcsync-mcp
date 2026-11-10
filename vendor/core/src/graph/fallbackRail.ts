@@ -119,6 +119,7 @@ export function railLabelFor(key: string): string {
   if (key === "ingress") return "INGRESS";
   if (key === "egress") return "EGRESS";
   if (key === "listener") return "LISTENER";
+  if (key === "invokeconfig") return "ASYNC";
   return "DLQ";
 }
 

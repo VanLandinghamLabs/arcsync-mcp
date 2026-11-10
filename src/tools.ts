@@ -1,4 +1,6 @@
+import type { GraphRead, GraphReadView } from "@auto-arch-diagram/core/apiContract";
 import type { DeltaEnvelope } from "@auto-arch-diagram/core/graphDelta";
+import { canonicalFieldsOf } from "@auto-arch-diagram/core/graphRead";
 import { renderMermaid } from "@auto-arch-diagram/core/mermaid";
 import { z } from "zod";
 import type { ApiClient } from "./api.js";
@@ -6,7 +8,6 @@ import {
   canvasUrl,
   compact,
   describeResource,
-  diagramFields,
   diagramTitle,
   findResource,
   graphAsJson,
@@ -99,23 +100,24 @@ const getDiagram = defineTool({
   },
   readOnly: true,
   async run({ api, appUrl }, { graphId: id, format = "mermaid" }) {
-    const raw = await api.get<Row>(`/graphs/${enc(id)}`);
-    const fields = diagramFields(raw);
+    const raw = await api.get<GraphRead>(`/graphs/${enc(id)}`);
+    const top: GraphReadView = raw;
+    const fields = canonicalFieldsOf(raw);
     const graph = graphOf(raw);
     // A start_parse id resolves to the diagram's canonical id, which is the
     // one list_diagrams and the version history are keyed by.
-    const diagramId = (raw.canonicalGraphId as string | undefined) || id;
+    const diagramId = top.canonicalGraphId || id;
     const header = compact({
       graphId: diagramId,
       title: diagramTitle(fields),
-      projectType: fields.projectType as string | undefined,
-      provider: fields.provider as string | undefined,
-      lastParsedAt: (fields.lastParsedAt as string | undefined) || undefined,
-      commitSha: fields.commitSha as string | undefined,
+      projectType: fields.projectType,
+      provider: fields.provider,
+      lastParsedAt: fields.lastParsedAt || undefined,
+      commitSha: fields.commitSha,
       canvasUrl: canvasUrl(appUrl, diagramId),
     });
     if (!graph) {
-      const status = (fields.status as string | undefined) ?? "unknown";
+      const status = fields.status ?? "unknown";
       return asJson({
         ...header,
         status,
@@ -269,11 +271,8 @@ const getDelta = defineTool({
   readOnly: true,
   async run({ api, appUrl }, { graphId: id, version, against = "previous" }) {
     if (!version) {
-      const raw = await api.get<Row>(`/graphs/${enc(id)}`);
-      return boundedJson(
-        describeEnvelope(raw.delta as DeltaEnvelope | undefined, appUrl, id),
-        `${canvasUrl(appUrl, id)}?delta=1`,
-      );
+      const { delta }: GraphReadView = await api.get<GraphRead>(`/graphs/${enc(id)}`);
+      return boundedJson(describeEnvelope(delta, appUrl, id), `${canvasUrl(appUrl, id)}?delta=1`);
     }
     const diff = await api.get<Row>(
       `/graphs/${enc(id)}/history/${enc(version)}/diff?against=${against}`,

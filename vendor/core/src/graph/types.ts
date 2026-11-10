@@ -20,6 +20,7 @@ export enum ResourceType {
   APIGW_V2_API = "aws_apigatewayv2_api",
   SQS_QUEUE = "aws_sqs_queue",
   CLOUDFRONT_DISTRIBUTION = "aws_cloudfront_distribution",
+  CLOUDFRONT_FUNCTION = "aws_cloudfront_function",
   ROUTE53_ZONE = "aws_route53_zone",
   ROUTE53_RECORD = "aws_route53_record",
   ACM_CERTIFICATE = "aws_acm_certificate",

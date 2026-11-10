@@ -3,7 +3,6 @@ import { sampleGraph } from "./fixtures.js";
 import {
   boundedAttributes,
   describeResource,
-  diagramFields,
   diagramTitle,
   findResource,
   graphAsJson,
@@ -74,11 +73,7 @@ describe("matchesQuery", () => {
   });
 });
 
-describe("diagramFields / graphOf", () => {
-  it("reads the nested canonical shape and the spread shape alike", () => {
-    expect(diagramFields({ graphId: "g", canonical: { branch: "dev" } }).branch).toBe("dev");
-    expect(diagramFields({ graphId: "g", branch: "main", canonical: null }).branch).toBe("main");
-  });
+describe("graphOf", () => {
   it("returns the graph only when it has node and edge arrays", () => {
     expect(graphOf({ graphData: sampleGraph() })?.nodes).toHaveLength(3);
     expect(graphOf({ graphData: { nodes: [] } })).toBeNull();

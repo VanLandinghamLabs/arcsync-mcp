@@ -1,7 +1,29 @@
 import { createEdgeIdMinter } from "./edgeIds.js";
 import { stackMembership } from "./groupByStack.js";
-import type { ArchGraph, ResourceEdge } from "./types.js";
+import type { ArchGraph, ResourceEdge, ResourceNode } from "./types.js";
 import { EdgeType, ResourceType } from "./types.js";
+
+const CUSTOM_DOMAIN_RESOURCE_TYPES: ReadonlySet<string> = new Set([
+  "AWS::ApiGatewayV2::DomainName",
+  "aws_apigatewayv2_domain_name",
+  "aws:apigatewayv2/domainName:DomainName",
+  "aws-native:apigatewayv2:DomainName",
+  "AWS::ApiGateway::DomainName",
+  "aws_api_gateway_domain_name",
+  "aws:apigateway/domainName:DomainName",
+  "aws-native:apigateway:DomainName",
+]);
+
+const API_MAPPING_RESOURCE_TYPES: ReadonlySet<string> = new Set([
+  "AWS::ApiGatewayV2::ApiMapping",
+  "aws_apigatewayv2_api_mapping",
+  "aws:apigatewayv2/apiMapping:ApiMapping",
+  "aws-native:apigatewayv2:ApiMapping",
+  "AWS::ApiGateway::BasePathMapping",
+  "aws_api_gateway_base_path_mapping",
+  "aws:apigateway/basePathMapping:BasePathMapping",
+  "aws-native:apigateway:BasePathMapping",
+]);
 
 /**
  * Transforms APIGW_V2_INTEGRATION nodes into labeled edges.
@@ -152,16 +174,21 @@ export function collapseIntegrations(graph: ArchGraph): ArchGraph {
         }
       }
 
-      // Check indirect via co-reference: Route53 → Intermediate ← Bridge → ApiGateway
+      // Check indirect via co-reference: Route53 → DomainName ← ApiMapping → ApiGateway.
+      // Both ends are type-checked: any looser triangle matches every record
+      // through a shared hosted zone and deletes the zone as an "intermediate" (#2888).
       if (!found) {
         for (const intermediateId of recordTargets) {
           if (found) break;
+          if (!isResourceTypeIn(nodeById.get(intermediateId), CUSTOM_DOMAIN_RESOURCE_TYPES)) {
+            continue;
+          }
           const coReferencers = inEdges.get(intermediateId);
           if (!coReferencers) continue;
 
           for (const bridgeId of coReferencers) {
             if (found) break;
-            if (bridgeId === node.id) continue;
+            if (!isResourceTypeIn(nodeById.get(bridgeId), API_MAPPING_RESOURCE_TYPES)) continue;
             const bridgeTargets = outEdges.get(bridgeId);
             if (!bridgeTargets) continue;
 
@@ -233,3 +260,6 @@ export function collapseIntegrations(graph: ArchGraph): ArchGraph {
     metadata: graph.metadata,
   };
 }
+
+const isResourceTypeIn = (node: ResourceNode | undefined, types: ReadonlySet<string>): boolean =>
+  node !== undefined && types.has(node.resourceType);

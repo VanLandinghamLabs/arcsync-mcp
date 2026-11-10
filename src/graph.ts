@@ -16,7 +16,9 @@ export const compact = <T extends Row>(o: T): Partial<T> =>
 export const canvasUrl = (appUrl: string, graphId: string) =>
   `${appUrl}/canvas/${encodeURIComponent(graphId)}`;
 
-function repoLabel(row: Row): string | undefined {
+type TitleFields = Pick<Row, "displayOwner" | "displayRepo" | "repoUrl" | "branch" | "subpath">;
+
+function repoLabel(row: Partial<TitleFields>): string | undefined {
   const owner = str(row.displayOwner);
   const repo = str(row.displayRepo);
   if (owner && repo) return `${owner}/${repo}`;
@@ -24,7 +26,7 @@ function repoLabel(row: Row): string | undefined {
   return url?.replace(/^https?:\/\/(www\.)?github\.com\//, "").replace(/\.git$/, "");
 }
 
-export function diagramTitle(row: Row): string {
+export function diagramTitle(row: Partial<TitleFields>): string {
   const repo = repoLabel(row) ?? "diagram";
   const branch = str(row.branch);
   const subpath = str(row.subpath);
@@ -59,17 +61,7 @@ export function matchesQuery(row: Row, query: string): boolean {
     .some((v) => v.toLowerCase().includes(q));
 }
 
-/**
- * `GET /graphs/{id}` answers in two shapes: the CANON branch nests the row
- * under `canonical`, the seed-row branch spreads it at the top level. Both are
- * read the same way here.
- */
-export function diagramFields(raw: Row): Row {
-  const nested = raw.canonical;
-  return nested && typeof nested === "object" ? { ...raw, ...(nested as Row) } : raw;
-}
-
-export function graphOf(raw: Row): ArchGraph | null {
+export function graphOf(raw: { graphData?: unknown }): ArchGraph | null {
   const g = raw.graphData as ArchGraph | undefined;
   return g && Array.isArray(g.nodes) && Array.isArray(g.edges) ? g : null;
 }

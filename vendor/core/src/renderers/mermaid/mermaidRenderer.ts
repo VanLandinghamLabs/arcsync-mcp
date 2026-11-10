@@ -52,6 +52,7 @@ export const RESOURCE_DISPLAY_NAMES: Record<ResourceType, string> = {
   [ResourceType.APIGW_V2_API]: "API Gateway",
   [ResourceType.SQS_QUEUE]: "SQS Queue",
   [ResourceType.CLOUDFRONT_DISTRIBUTION]: "CloudFront",
+  [ResourceType.CLOUDFRONT_FUNCTION]: "CloudFront Function",
   [ResourceType.ROUTE53_ZONE]: "Route53 Zone",
   [ResourceType.ROUTE53_RECORD]: "Route53 Record",
   [ResourceType.ACM_CERTIFICATE]: "ACM Certificate",
@@ -482,6 +483,7 @@ const MERMAID_RAIL_LABELS: ReadonlySet<string> = new Set([
   "LISTENER",
   "SUB",
   "TARGET",
+  "NOTIFY",
 ]);
 
 /**

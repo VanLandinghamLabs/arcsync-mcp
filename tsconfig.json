@@ -13,8 +13,10 @@
     "types": ["node"],
     "noEmit": true,
     "paths": {
+      "@auto-arch-diagram/core/apiContract": ["./vendor/core/src/apiContract.ts"],
       "@auto-arch-diagram/core/authoring": ["./vendor/core/src/authoring/index.ts"],
       "@auto-arch-diagram/core/graphDelta": ["./vendor/core/src/graph/graphDelta.ts"],
+      "@auto-arch-diagram/core/graphRead": ["./vendor/core/src/graphRead.ts"],
       "@auto-arch-diagram/core/mermaid": ["./vendor/core/src/renderers/mermaid/mermaidRenderer.ts"],
       "@auto-arch-diagram/core/quotaErrorCodes": ["./vendor/core/src/quotaErrorCodes.ts"],
       "@auto-arch-diagram/core/types": ["./vendor/core/src/graph/types.ts"]

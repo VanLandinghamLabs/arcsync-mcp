@@ -1,7 +1,9 @@
 import { analyzeAccessPatterns } from "./analyzeAccessPatterns.js";
 import { collapseIntegrations } from "./collapseIntegrations.js";
+import { dropSupersededReferences } from "./dropSupersededReferences.js";
 import { extractEventFlows } from "./eventFlows.js";
 import { foldEventLeftovers } from "./foldEventLeftovers.js";
+import { foldInvokeConfigs } from "./foldInvokeConfigs.js";
 import { groupByEngine } from "./groupByEngine.js";
 import { groupByStack } from "./groupByStack.js";
 import type { ArchGraph } from "./types.js";
@@ -17,6 +19,10 @@ export interface PrepareOptions {
  * extractEventFlows are both non-idempotent.
  */
 export function prepare(graph: ArchGraph, options?: PrepareOptions): ArchGraph {
-  const base = foldEventLeftovers(options?.eventFlows === false ? graph : extractEventFlows(graph));
-  return groupByEngine(groupByStack(collapseIntegrations(analyzeAccessPatterns(base))));
+  const base = foldInvokeConfigs(
+    foldEventLeftovers(options?.eventFlows === false ? graph : extractEventFlows(graph)),
+  );
+  return groupByEngine(
+    groupByStack(collapseIntegrations(analyzeAccessPatterns(dropSupersededReferences(base)))),
+  );
 }

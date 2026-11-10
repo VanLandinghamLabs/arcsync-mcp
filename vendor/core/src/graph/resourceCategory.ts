@@ -27,6 +27,7 @@ export const CATEGORY_BY_TYPE: Partial<Record<ResourceType, ResourceCategory>> =
   [ResourceType.EC2_SECURITY_GROUP]: "networking",
   [ResourceType.ELB_LOAD_BALANCER]: "networking",
   [ResourceType.CLOUDFRONT_DISTRIBUTION]: "networking",
+  [ResourceType.CLOUDFRONT_FUNCTION]: "networking",
   [ResourceType.ROUTE53_ZONE]: "networking",
   [ResourceType.ROUTE53_RECORD]: "networking",
   [ResourceType.EC2_NAT_GATEWAY]: "networking",

@@ -47,6 +47,7 @@ export const AWS_ICON_FILENAMES: Partial<Record<ResourceType, string>> = {
   [ResourceType.ROUTE53_ZONE]: "route53.svg",
   [ResourceType.ROUTE53_RECORD]: "route53.svg",
   [ResourceType.CLOUDFRONT_DISTRIBUTION]: "cloudfront.svg",
+  [ResourceType.CLOUDFRONT_FUNCTION]: "cloudfront.svg",
   [ResourceType.ACM_CERTIFICATE]: "acm.svg",
 
   // Messaging & Events

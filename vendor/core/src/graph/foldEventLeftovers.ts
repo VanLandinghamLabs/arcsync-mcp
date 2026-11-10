@@ -1,3 +1,4 @@
+import { railBudgetSubscribers } from "./budgetSubscribers.js";
 import {
   fallbackRailFor,
   namesNode,
@@ -78,7 +79,13 @@ function leftoverRail(node: ResourceNode, kind: LeftoverKind): FallbackRail {
   return fallbackRailFor(node, railLabelFor(kind), policy, name || undefined);
 }
 
+/** Also stamps budgets' inline email subscribers, the inline twin of an email
+ * subscription's rail (see `railBudgetSubscribers`). */
 export function foldEventLeftovers(graph: ArchGraph): ArchGraph {
+  return railBudgetSubscribers(foldSubscriptionsAndTargets(graph));
+}
+
+function foldSubscriptionsAndTargets(graph: ArchGraph): ArchGraph {
   if (!hasGraphArrays(graph)) return graph;
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
   const containerIds = new Set(
