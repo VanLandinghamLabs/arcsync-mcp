@@ -55,6 +55,4 @@ Otherwise, add this to `.mcp.json`; it holds no credential:
 }
 ```
 
-The first tool call that reaches ArcSync returns a connect link for the user to open. To connect ahead of time, the user runs `npx -y arcsync-mcp login` in their own terminal. On a machine without a browser, the user instead creates an MCP credential at https://arcsync.dev/settings and sets `ARCSYNC_CLIENT_ID` and `ARCSYNC_CLIENT_SECRET` (the secret exported in their shell, referenced as `"${ARCSYNC_CLIENT_SECRET:-}"` in the `env` block).
-
-Never write the secret into a file, echo it, or commit it. Full guide: https://arcsync.dev/docs/mcp
+The first tool call that reaches ArcSync returns a connect link for the user to open. To connect ahead of time, the user runs `npx -y arcsync-mcp login` in their own terminal. On a machine without a browser, the user follows the headless setup in https://arcsync.dev/docs/mcp themselves. With the ArcSync plugin installed, they only export the two variables that guide names before starting Claude Code, and add no `.mcp.json` entry. Never ask for the credential, and never write it into a file, echo it, or commit it.
