@@ -86,12 +86,34 @@ const manyNodes = () =>
     resourceType: "aws_lambda_function",
   }));
 
-function expectTruncated(text: string, canvas: string) {
-  const [body, note] = text.split("\n…truncated: ");
-  expect(body).toHaveLength(60_000);
-  expect(note).toMatch(/^\d+ characters in full\. Call describe_resource/);
-  expect(note.endsWith(`open the canvas: ${canvas}`)).toBe(true);
+const manyEdges = (count: number, hub = "aws_lambda_function.r0") =>
+  Array.from({ length: count }, (_, i) => ({
+    id: `e${i}`,
+    source: i % 2 ? hub : `aws_lambda_function.r${i + 1}`,
+    target: i % 2 ? `aws_lambda_function.r${i + 1}` : hub,
+    type: "REFERENCE",
+  }));
+
+type Truncated = { truncated: { note: string; lists: Record<string, string> } } & Record<
+  string,
+  unknown
+>;
+
+/** A cut response is still whole JSON, inside the cap, and names each list it cut. */
+function expectListsCut(text: string, canvas: string, lists: string[]): Truncated {
+  expect(text.length).toBeLessThanOrEqual(60_000);
+  const out = JSON.parse(text) as Truncated;
+  expect(Object.keys(out)[0]).toBe("truncated");
+  expect(Object.keys(out.truncated.lists).sort()).toEqual([...lists].sort());
+  for (const shown of Object.values(out.truncated.lists)) {
+    expect(shown).toMatch(/^first [1-9]\d* of \d+$/);
+  }
+  expect(out.truncated.note.endsWith(canvas)).toBe(true);
+  return out;
 }
+
+const at = (o: unknown, path: string) =>
+  path.split(".").reduce((v, k) => (v as Record<string, unknown>)[k], o) as unknown[];
 
 describe("arcsync MCP server", () => {
   it("reports the package's own version in serverInfo", async () => {
@@ -192,8 +214,59 @@ describe("arcsync MCP server", () => {
         "GET /graphs/job1": () => seed({ graphData: { ...sampleGraph(), nodes: manyNodes() } }),
       });
       const { text } = await call("get_diagram", { graphId: "job1", format: "json" });
-      expectTruncated(text, "https://arcsync.dev/canvas/g1");
-      expect(text.slice(0, 200)).toContain('"title": "acme/infra@main"');
+      const out = expectListsCut(text, "https://arcsync.dev/canvas/g1", ["resources"]);
+      expect(out.title).toBe("acme/infra@main");
+      expect(out.relationships).toHaveLength(2);
+    });
+
+    it("keeps relationships when resources alone would fill the cap (#2757)", async () => {
+      const { call } = await connect({
+        "GET /graphs/g1": () =>
+          canon({ graphData: { ...sampleGraph(), nodes: manyNodes(), edges: manyEdges(2000) } }),
+      });
+      const { text } = await call("get_diagram", { graphId: "g1", format: "json" });
+      const out = expectListsCut(text, "https://arcsync.dev/canvas/g1", [
+        "resources",
+        "relationships",
+      ]);
+      const n = at(out, "resources").length;
+      expect(at(out, "relationships").length).toBe(n);
+      // The most that fits: one more entry in each list passes the cap.
+      const node = manyNodes()[n];
+      const edge = manyEdges(2000)[n];
+      const onceMore = {
+        ...out,
+        truncated: {
+          ...out.truncated,
+          lists: { resources: `first ${n + 1} of 2000`, relationships: `first ${n + 1} of 2000` },
+        },
+        resources: [
+          ...at(out, "resources"),
+          { id: node.id, name: node.name, resourceType: node.resourceType, type: node.type },
+        ],
+        relationships: [
+          ...at(out, "relationships"),
+          { source: edge.source, target: edge.target, type: edge.type },
+        ],
+      };
+      expect(JSON.stringify(onceMore, null, 2).length).toBeGreaterThan(60_000);
+    });
+
+    it("measures the cap on escaped JSON, and never repeats a name in the note (#2757)", async () => {
+      // 1,000 names of 40 characters: 40,000 raw, but each `"` escapes to `\"`.
+      const hostile = '"'.repeat(39);
+      const nodes = Array.from({ length: 1000 }, (_, i) => ({
+        id: `n${i}`,
+        type: "lambda",
+        name: `${hostile}${i % 10}`,
+        resourceType: "x",
+      }));
+      const { call } = await connect({
+        "GET /graphs/g1": () => canon({ graphData: { ...sampleGraph(), nodes } }),
+      });
+      const { text } = await call("get_diagram", { graphId: "g1", format: "json" });
+      const out = expectListsCut(text, "https://arcsync.dev/canvas/g1", ["resources"]);
+      expect(JSON.stringify(out.truncated)).not.toContain('\\"');
     });
 
     it("reports the canonical graphId when given the id start_parse returned", async () => {
@@ -302,6 +375,23 @@ describe("arcsync MCP server", () => {
       expect((await call("describe_resource", { graphId: "g2", resource: "x" })).text).toMatch(
         /no graph data/,
       );
+    });
+
+    it("bounds a hub's incoming and outgoing lists, cutting both evenly (#2757)", async () => {
+      const { call } = await connect({
+        "GET /graphs/g1": () =>
+          canon({ graphData: { ...sampleGraph(), nodes: manyNodes(), edges: manyEdges(4000) } }),
+      });
+      const { text } = await call("describe_resource", {
+        graphId: "g1",
+        resource: "aws_lambda_function.r0",
+      });
+      const out = expectListsCut(text, "https://arcsync.dev/canvas/g1", ["incoming", "outgoing"]);
+      expect(out.truncated.lists).toEqual({
+        incoming: `first ${at(out, "incoming").length} of 2000`,
+        outgoing: `first ${at(out, "outgoing").length} of 2000`,
+      });
+      expect(at(out, "incoming").length).toBe(at(out, "outgoing").length);
     });
   });
 
@@ -465,12 +555,17 @@ describe("arcsync MCP server", () => {
             summary: "adds many",
             counts,
             nodes: { added: manyNodes(), removed: [], changed: [] },
-            edges: { added: [], removed: [] },
+            edges: { added: manyEdges(2000), removed: [] },
           },
         }),
       });
       const { text } = await call("get_delta", { graphId: "pro" });
-      expectTruncated(text, "https://arcsync.dev/canvas/pro?delta=1");
+      const out = expectListsCut(text, "https://arcsync.dev/canvas/pro?delta=1", [
+        "resources.added",
+        "relationships.added",
+      ]);
+      expect(out.summary).toBe("adds many");
+      expect(at(out, "relationships.added").length).toBe(at(out, "resources.added").length);
     });
 
     it("cuts an oversized version diff", async () => {
@@ -478,12 +573,37 @@ describe("arcsync MCP server", () => {
       const { call } = await connect({
         [`GET /graphs/g1/history/${encodeURIComponent(ts)}/diff?against=previous`]: () => ({
           counts,
-          nodes: { added: manyNodes(), removed: [], changed: [] },
-          edges: { added: [], removed: [] },
+          nodes: { added: manyNodes(), removed: [], changed: manyNodes() },
+          edges: { added: [], removed: manyEdges(50) },
         }),
       });
       const { text } = await call("get_delta", { graphId: "g1", version: ts });
-      expectTruncated(text, "https://arcsync.dev/canvas/g1");
+      const out = expectListsCut(text, "https://arcsync.dev/canvas/g1", [
+        "resources.added",
+        "resources.changed",
+      ]);
+      expect(at(out, "relationships.removed")).toHaveLength(50);
+    });
+
+    it("falls back to a plain cut when no list is what makes it large", async () => {
+      const { call } = await connect({
+        "GET /graphs/pro": () => ({
+          delta: {
+            status: "ok",
+            tier: "pro",
+            base: { ref: "main", sha: "abc", exact: true },
+            summary: "x".repeat(70_000),
+            counts,
+            nodes: { added: [], removed: [], changed: [] },
+            edges: { added: [], removed: [] },
+          },
+        }),
+      });
+      const { text } = await call("get_delta", { graphId: "pro" });
+      const [body, note] = text.split("\n…truncated: ");
+      expect(body).toHaveLength(60_000);
+      expect(note).toMatch(/^\d+ characters in full\. Open the canvas: /);
+      expect(note.endsWith("https://arcsync.dev/canvas/pro?delta=1")).toBe(true);
     });
 
     it("refuses a version that is not a timestamp", async () => {

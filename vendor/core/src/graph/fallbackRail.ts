@@ -161,9 +161,9 @@ export function fallbackRailFor(
  * thumbnail's copy was missing this function's `FALLBACK_RAIL_TAG_GAP`, putting
  * its name column 8px left of the canvas's on every rail.
  */
-export function fallbackRailNameLeft(label: string): number {
+export function fallbackRailNameLeft(label: string, cardWidth = NODE_WIDTH): number {
   return (
-    -NODE_WIDTH / 2 +
+    -cardWidth / 2 +
     FALLBACK_RAIL_TAG_X +
     label.length * FALLBACK_RAIL_TAG_CHAR_W +
     FALLBACK_RAIL_TAG_GAP

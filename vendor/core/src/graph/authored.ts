@@ -6,7 +6,7 @@ import { ResourceType } from "./types.js";
  * `type: "authored"`, with `attributes.icon` (a namespaced id such as `user` or
  * `aws:lambda`), `attributes.kind` (free text such as `zone`), and any other
  * properties. Nothing here applies to an IaC-parsed resource; the one authored
- * node a parse adds is a CloudFormation boundary node (`cfnExternalSystems`).
+ * node a parse adds is an external-system boundary node (`parsers/externalSystems`).
  */
 export function isAuthored(node: Pick<ResourceNode, "type">): boolean {
   return node.type === ResourceType.AUTHORED;

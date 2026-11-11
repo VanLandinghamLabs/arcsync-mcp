@@ -52,11 +52,52 @@ type Row = Record<string, unknown>;
 const MAX_LIST_PAGES = 10;
 const MAX_OUTPUT_CHARS = 60_000;
 
-const boundedJson = (value: unknown, canvas: string) => {
+function sliceListAt(
+  obj: Row,
+  [key, ...rest]: string[],
+  slice: (items: unknown[]) => unknown[],
+): Row {
+  const v = obj[key];
+  if (rest.length === 0) return Array.isArray(v) ? { ...obj, [key]: slice(v) } : obj;
+  return v && typeof v === "object" && !Array.isArray(v)
+    ? { ...obj, [key]: sliceListAt(v as Row, rest, slice) }
+    : obj;
+}
+
+/**
+ * Past the cap, every list in `lists` keeps the same number of entries, the
+ * most that fits, so no list is cut to nothing while another is whole. The
+ * note names only these caller-given paths, never repository text.
+ */
+const boundedJson = (value: Row, canvas: string, lists: readonly string[], hint = "") => {
   const text = asJson(value);
-  return text.length > MAX_OUTPUT_CHARS
-    ? `${text.slice(0, MAX_OUTPUT_CHARS)}\n…truncated: ${text.length} characters in full. Call describe_resource for one resource, or open the canvas: ${canvas}`
-    : text;
+  if (text.length <= MAX_OUTPUT_CHARS) return text;
+  let longest = 0;
+  const cutTo = (n: number) => {
+    const cut: Record<string, string> = {};
+    let out = value;
+    for (const path of lists) {
+      out = sliceListAt(out, path.split("."), (items) => {
+        longest = Math.max(longest, items.length);
+        if (items.length > n) cut[path] = `first ${n} of ${items.length}`;
+        return items.slice(0, n);
+      });
+    }
+    const note = `Lists are cut to fit the response.${hint} Open the canvas for all of it: ${canvas}`;
+    return asJson({ truncated: { note, lists: cut }, ...out });
+  };
+  const empty = cutTo(0);
+  if (empty.length > MAX_OUTPUT_CHARS) {
+    return `${text.slice(0, MAX_OUTPUT_CHARS)}\n…truncated: ${text.length} characters in full. Open the canvas: ${canvas}`;
+  }
+  let fits = 0;
+  let over = longest;
+  while (over - fits > 1) {
+    const mid = Math.floor((fits + over) / 2);
+    if (cutTo(mid).length <= MAX_OUTPUT_CHARS) fits = mid;
+    else over = mid;
+  }
+  return fits ? cutTo(fits) : empty;
 };
 
 const listDiagrams = defineTool({
@@ -125,7 +166,12 @@ const getDiagram = defineTool({
       });
     }
     if (format === "json") {
-      return boundedJson({ ...header, ...graphAsJson(graph) }, canvasUrl(appUrl, diagramId));
+      return boundedJson(
+        { ...header, ...graphAsJson(graph) },
+        canvasUrl(appUrl, diagramId),
+        ["resources", "relationships"],
+        " Call describe_resource for one resource.",
+      );
     }
 
     const mermaid = renderMermaid(graph);
@@ -158,7 +204,7 @@ const describeResourceTool = defineTool({
     resource: z.string().min(1).max(500).describe("Resource id, name, or a substring of either."),
   },
   readOnly: true,
-  async run({ api }, { graphId: id, resource }) {
+  async run({ api, appUrl }, { graphId: id, resource }) {
     const graph = graphOf(await api.get<Row>(`/graphs/${enc(id)}`));
     if (!graph) return "This diagram has no graph data yet.";
     const match = findResource(graph, resource);
@@ -171,7 +217,10 @@ const describeResourceTool = defineTool({
         candidates: match.candidates.map(nodeRef),
       });
     }
-    return asJson(describeResource(graph, match.node));
+    return boundedJson(describeResource(graph, match.node), canvasUrl(appUrl, id), [
+      "incoming",
+      "outgoing",
+    ]);
   },
 });
 
@@ -208,7 +257,15 @@ const listVersions = defineTool({
   },
 });
 
-function describeEnvelope(delta: DeltaEnvelope | undefined, appUrl: string, id: string): unknown {
+const DELTA_LISTS = [
+  "resources.added",
+  "resources.removed",
+  "resources.changed",
+  "relationships.added",
+  "relationships.removed",
+];
+
+function describeEnvelope(delta: DeltaEnvelope | undefined, appUrl: string, id: string): Row {
   if (!delta) {
     return {
       note: "This diagram carries no pull-request delta. A PR delta exists for a PR-branch diagram uploaded by the ArcSync GitHub Action. For changes between saved versions, call list_versions, then get_delta with a version.",
@@ -272,7 +329,11 @@ const getDelta = defineTool({
   async run({ api, appUrl }, { graphId: id, version, against = "previous" }) {
     if (!version) {
       const { delta }: GraphReadView = await api.get<GraphRead>(`/graphs/${enc(id)}`);
-      return boundedJson(describeEnvelope(delta, appUrl, id), `${canvasUrl(appUrl, id)}?delta=1`);
+      return boundedJson(
+        describeEnvelope(delta, appUrl, id),
+        `${canvasUrl(appUrl, id)}?delta=1`,
+        DELTA_LISTS,
+      );
     }
     const diff = await api.get<Row>(
       `/graphs/${enc(id)}/history/${enc(version)}/diff?against=${against}`,
@@ -289,6 +350,7 @@ const getDelta = defineTool({
         relationships: diff.edges,
       }),
       canvasUrl(appUrl, id),
+      DELTA_LISTS,
     );
   },
 });

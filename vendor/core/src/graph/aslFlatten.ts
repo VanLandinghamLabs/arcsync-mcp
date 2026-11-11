@@ -31,6 +31,28 @@ function markerFor(logicalId: string, refs: string[]): string {
   return `${REF_MARKER}${index}__`;
 }
 
+/**
+ * Every non-empty `${name}` in a `Fn::Sub` template, in order, with the span it
+ * covers. A scan rather than `/\$\{([^}]+)\}/g`: that regex runs to the end of
+ * the string from every `${` that has no `}` after it, so `${${${...` cost
+ * O(n^2) (#2708, #2757). Once one `${` finds no `}`, none after it can.
+ */
+function subPlaceholders(template: string): Array<{ name: string; start: number; end: number }> {
+  const placeholders: Array<{ name: string; start: number; end: number }> = [];
+  let start = template.indexOf("${");
+  while (start !== -1) {
+    const close = template.indexOf("}", start + 2);
+    if (close === -1) break;
+    if (close === start + 2) {
+      start = template.indexOf("${", start + 1);
+      continue;
+    }
+    placeholders.push({ name: template.slice(start + 2, close), start, end: close + 1 });
+    start = template.indexOf("${", close + 1);
+  }
+  return placeholders;
+}
+
 function collect(
   value: unknown,
   out: string[],
@@ -86,23 +108,20 @@ function collect(
   if (typeof template === "string") {
     if (template.includes(REF_MARKER)) return false;
     const vars = (Array.isArray(sub) ? sub[1] : undefined) as Record<string, unknown> | undefined;
-    let failed = false;
-    const rendered = template.replace(/\$\{([^}]+)\}/g, (_m, name: string) => {
+    const rendered: string[] = [];
+    let from = 0;
+    for (const { name, start, end } of subPlaceholders(template)) {
+      rendered.push(template.slice(from, start));
+      from = end;
       const key = name.trim();
       const pseudo = lookupByType(PSEUDO_PARAMETERS, key);
-      if (pseudo) return pseudo;
-      if (vars && Object.hasOwn(vars, key)) {
-        const nested: string[] = [];
-        if (!collect(vars[key], nested, refs, depth - 1)) {
-          failed = true;
-          return "";
-        }
-        return nested.join("");
-      }
-      return markerFor(key.split(".")[0], refs);
-    });
-    if (failed) return false;
-    out.push(rendered);
+      if (pseudo) rendered.push(pseudo);
+      else if (vars && Object.hasOwn(vars, key)) {
+        if (!collect(vars[key], rendered, refs, depth - 1)) return false;
+      } else rendered.push(markerFor(key.split(".")[0], refs));
+    }
+    rendered.push(template.slice(from));
+    out.push(rendered.join(""));
     return true;
   }
 

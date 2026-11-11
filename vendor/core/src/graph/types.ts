@@ -545,6 +545,12 @@ export interface ResourceNode {
    * stored in the parser's spelling and normalized by the reader.
    */
   decodedPaths?: string[][];
+  /** Parser provenance: `attributes` keys whose value AWS CDK filled in because
+   * the author gave none (a security group's `GroupDescription` is its
+   * construct path). The value stays in `attributes` for the inspector; a card
+   * neither leads with it nor draws it as a row. Set by `cfnParser`, which is
+   * the only parser that sees the `aws:cdk:path` the comparison needs. */
+  cdkDefaults?: string[];
   position?: { x: number; y: number };
   size?: { width: number; height: number };
   /** Synthesized by the display-time `collapseRouteTables` pass. Never parsed,

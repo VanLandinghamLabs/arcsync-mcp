@@ -300,6 +300,7 @@ export interface MemberCanonicalFields extends PublicCanonicalFields {
   driftSha?: string;
   sourceObservedAt?: string;
   deletedAt?: string;
+  delistedAt?: string;
   description?: string;
   topics?: string[];
   primaryLanguage?: string;

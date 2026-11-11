@@ -112,6 +112,8 @@ export const ALL_ERROR_CODES = [
    * refused to add a new library entry. The API admits against the same cap,
    * but imports in flight together all pass that count. */
   "DIAGRAM_LIMIT",
+  /** An erasure was deleting this diagram when the parse tried to write it. */
+  "DIAGRAM_ERASING",
 ] as const;
 
 export type ErrorCode = (typeof ALL_ERROR_CODES)[number];
@@ -165,6 +167,8 @@ export const KNOWN_AND_IGNORED_PARSE_FAILURES = [
   "SYNTH_PLAN_REQUIRED",
   "COST_FREEZE",
   "DIAGRAM_LIMIT",
+  // An erasure deleting the diagram the parse targets: a race, not a defect.
+  "DIAGRAM_ERASING",
   // The spend breaker paging the operator is the signal; one issue per job
   // refused while it is tripped would only bury it.
   "BUILDS_PAUSED",
@@ -237,6 +241,8 @@ export const QUOTA_REFUSAL_FAILURES = [
   "COST_FREEZE",
   "DIAGRAM_LIMIT",
   "BUILDER_CAPACITY_EXCEEDED",
+  // Its message tells the user to retry once an erasure finishes (#2797).
+  "DIAGRAM_ERASING",
 ] as const satisfies readonly ErrorCode[];
 
 const QUOTA_REFUSAL_CODES: ReadonlySet<string> = new Set(QUOTA_REFUSAL_FAILURES);
