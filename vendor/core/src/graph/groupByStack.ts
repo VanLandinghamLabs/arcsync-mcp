@@ -1,5 +1,5 @@
 import { createEdgeIdMinter } from "./edgeIds.js";
-import type { ArchGraph, ResourceEdge } from "./types.js";
+import type { ArchGraph, IacEngine, ResourceEdge } from "./types.js";
 import { EdgeType, ResourceType } from "./types.js";
 
 /**
@@ -47,6 +47,42 @@ export function stackMembership(graph: ArchGraph): Map<string, string> {
 }
 
 /**
+ * CDK's `NestedStack` resource in its parent's template:
+ * `<scope path><id>NestedStack<id>NestedStackResource<hash>`.
+ */
+const NESTED_STACK_RESOURCE = /^(.*)NestedStack(.+)NestedStackResource[0-9A-F]{8}$/;
+/** The hash CDK appends to a unique id (a nested stack's template file name, a
+ * Stage stack's artifact id). */
+const CDK_ID_HASH = /[0-9A-F]{8}$/;
+
+/**
+ * The child stack each CDK nested-stack resource deploys, keyed by the
+ * resource's node id. The child's template file is named after its full
+ * construct path plus a hash: the parent's name (without its own hash) and the
+ * scope path from the resource's logical id. A resource with no single
+ * matching stack in the graph is left out.
+ */
+function nestedStackChildren(
+  graph: ArchGraph,
+  stackOf: ReadonlyMap<string, string>,
+  stackNames: ReadonlySet<string>,
+): Map<string, string> {
+  const children = new Map<string, string>();
+  for (const node of graph.nodes) {
+    const parent = stackOf.get(node.id);
+    if (parent === undefined || node.resourceType !== "AWS::CloudFormation::Stack") continue;
+    const match = NESTED_STACK_RESOURCE.exec(node.id.slice(parent.length + 1));
+    if (!match?.[1].endsWith(match[2])) continue;
+    const stem = `${parent.replace(CDK_ID_HASH, "")}${match[1]}`;
+    const found = [...stackNames].filter(
+      (name) => CDK_ID_HASH.test(name) && name.replace(CDK_ID_HASH, "") === stem,
+    );
+    if (found.length === 1) children.set(node.id, found[0]);
+  }
+  return children;
+}
+
+/**
  * Groups nodes into CloudFormation stack containers using CONTAINS edges.
  *
  * Extracts stack names from node ID prefixes (e.g., "CCHttpApi/CreateFn" → stack "CCHttpApi").
@@ -69,8 +105,9 @@ export function groupByStack(graph: ArchGraph): ArchGraph {
     }
   }
 
+  const stackOf = stackMembership(graph);
   const stacks = new Map<string, string[]>();
-  for (const [nodeId, stackName] of stackMembership(graph)) {
+  for (const [nodeId, stackName] of stackOf) {
     let stack = stacks.get(stackName);
     if (!stack) {
       stack = [];
@@ -81,12 +118,40 @@ export function groupByStack(graph: ArchGraph): ArchGraph {
 
   if (stacks.size <= 1) return graph;
 
-  const newNodes = [...graph.nodes];
-  const newEdges: ResourceEdge[] = [...graph.edges];
+  // A nested-stack resource duplicates its child's container: its edges (the
+  // child's Parameters and Outputs) move onto the container, which nests in
+  // the parent.
+  const nestedChildren = nestedStackChildren(graph, stackOf, new Set(stacks.keys()));
+  // The child container stands in for the resource, engine included, so
+  // `groupByEngine` can still place a parent whose only children are stacks.
+  const childEngine = new Map<string, IacEngine>();
+  for (const node of graph.nodes) {
+    const child = nestedChildren.get(node.id);
+    if (child !== undefined && node.engine) childEngine.set(child, node.engine);
+  }
+  const containerOf = (id: string) => {
+    const child = nestedChildren.get(id);
+    return child === undefined ? id : `stack:${child}`;
+  };
+  const newNodes = graph.nodes.filter((node) => !nestedChildren.has(node.id));
+  const newEdges: ResourceEdge[] = graph.edges.flatMap((edge) => {
+    if (!nestedChildren.has(edge.source) && !nestedChildren.has(edge.target)) return [edge];
+    if (edge.type === EdgeType.CONTAINS) return [];
+    return [{ ...edge, source: containerOf(edge.source), target: containerOf(edge.target) }];
+  });
   const nextEdgeId = createEdgeIdMinter(graph.edges);
+  for (const [resourceId, child] of nestedChildren) {
+    newEdges.push({
+      id: nextEdgeId(),
+      source: `stack:${stackOf.get(resourceId)}`,
+      target: `stack:${child}`,
+      type: EdgeType.CONTAINS,
+    });
+  }
 
   for (const [stackName, nodeIds] of stacks) {
     const stackId = `stack:${stackName}`;
+    const engine = childEngine.get(stackName);
 
     newNodes.push({
       id: stackId,
@@ -95,11 +160,12 @@ export function groupByStack(graph: ArchGraph): ArchGraph {
       name: stackName,
       resourceType: "AWS::CloudFormation::Stack",
       attributes: {},
+      ...(engine && { engine }),
     });
 
     for (const nodeId of nodeIds) {
       // Skip nodes already contained by another resource (they're nested inside it)
-      if (alreadyContained.has(nodeId)) continue;
+      if (alreadyContained.has(nodeId) || nestedChildren.has(nodeId)) continue;
 
       newEdges.push({
         id: nextEdgeId(),

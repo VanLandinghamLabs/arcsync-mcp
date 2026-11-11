@@ -354,12 +354,14 @@ export interface MemberCanonGraphRead extends CanonGraphReadBase {
   delta?: DeltaEnvelope;
 }
 
-/** A CANON read by an invited outsider: redacted graph, team layout read-only. */
+/** A CANON read by an invited outsider: redacted graph, team layout read-only.
+ * A gallery-listed CANON (`isPublic`) carries the public set, which the
+ * gallery already serves anonymously; any other carries the outsider set. */
 export interface ViewerCanonGraphRead extends CanonGraphReadBase {
   access: "viewer";
   role: null;
   sharedLayout: false;
-  canonical: OutsiderCanonicalFields;
+  canonical: OutsiderCanonicalFields | PublicCanonicalFields;
 }
 
 /** A public CANON read by a caller who neither holds the repo nor was invited. */

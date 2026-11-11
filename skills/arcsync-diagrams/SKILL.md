@@ -20,7 +20,7 @@ ArcSync diagrams are Mermaid `flowchart`, `stateDiagram-v2` and `erDiagram` synt
 
 To change a diagram that was pushed earlier, edit the blocks in the spec (or fetch them with `get_diagram_source` and the `graphId` the push returned), keep the same `%% diagram:` id, validate, and push again.
 
-If the ArcSync tools are not available, still write and check the blocks by hand against this reference, and tell the user that the arcsync-mcp server validates and publishes them. In Claude Code they add it with `claude mcp add arcsync -- npx -y arcsync-mcp`; other clients and the Claude Desktop extension are covered at https://arcsync.dev/docs/mcp. It holds no credential: the first tool call that reaches ArcSync returns a link that connects their ArcSync account in the browser. `validate_diagram` and `list_icons` work without connecting.
+If the ArcSync tools are not available, still write and check the blocks by hand against this reference, and tell the user that the arcsync-mcp server validates and publishes them. In Claude Code they add it with `claude mcp add arcsync -- npx -y arcsync-mcp`, unless the ArcSync plugin is installed: it already starts the server, so check instead that Node.js 22 or later is on the PATH and that the server shows as connected in `/mcp`; other clients and the Claude Desktop extension are covered at https://arcsync.dev/docs/mcp. It holds no credential: the first tool call that reaches ArcSync returns a link that connects their ArcSync account in the browser. `validate_diagram` and `list_icons` work without connecting.
 
 ## A complete example
 

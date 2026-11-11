@@ -657,7 +657,8 @@ export interface ResourceEdge {
    * cross-resource reference with an unknown-output sentinel. Both DO still
    * know the property name at the point they mint the edge — from
    * `configuration.*.expressions` and `goal.propertyDependencies` respectively
-   * — so they record it here instead.
+   * — so they record it here instead. The Pulumi plan parser records it on
+   * every edge, not only fallback-keyed ones (see `isFallbackProperty`).
    *
    * Being persisted means a graph stored before this shipped has no value and
    * folds nothing until re-parsed. That is a real cost, and the reason the

@@ -1,8 +1,15 @@
+import { isFallbackProperty } from "./fallbackRail.js";
 import type { ArchGraph, ResourceEdge } from "./types.js";
 import { EdgeType } from "./types.js";
 
-const isBareReference = (edge: ResourceEdge): boolean =>
-  edge.type === EdgeType.REFERENCE && !edge.label && !edge.viaProperty;
+/** An unlabelled REFERENCE whose `viaProperty`, if any, names no relation of
+ * its own. A Pulumi plan tags every edge with its property (#2936), so only a
+ * fallback key or a CSP `connect-src` makes a tag meaningful. */
+export const isBareReference = (edge: ResourceEdge): boolean =>
+  edge.type === EdgeType.REFERENCE &&
+  !edge.label &&
+  (!edge.viaProperty ||
+    (edge.viaProperty !== "connect-src" && !isFallbackProperty(edge.viaProperty)));
 
 /**
  * Drops a bare REFERENCE edge when an IAM access edge runs the same
@@ -12,8 +19,8 @@ const isBareReference = (edge: ResourceEdge): boolean =>
  * one line, and the access edge is the one that says what the link is.
  *
  * Keyed on the ORDERED pair, so a trigger running store -> function survives
- * beside the function's access edge. Labelled, `viaProperty` and non-REFERENCE
- * edges are never touched. Surviving edges keep their ids.
+ * beside the function's access edge. Labelled, fallback- or `connect-src`-tagged
+ * and non-REFERENCE edges are never touched. Surviving edges keep their ids.
  */
 export function dropSupersededReferences(graph: ArchGraph): ArchGraph {
   const accessTargets = new Map<string, Set<string>>();

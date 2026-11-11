@@ -60,6 +60,73 @@ export function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[_-]/g, "");
 }
 
+/**
+ * Keys whose subtree declares a fallback target — matched against attribute
+ * keys by `foldFallbackNodes`' walk, and against `ResourceEdge.viaProperty` by
+ * its `declaredByEdge`. Normalized (lowercase,
+ * `_`/`-` stripped) so CloudFormation's `RedrivePolicy`, Terraform's
+ * `redrive_policy` and Pulumi's `redrivePolicy` all collapse to one entry.
+ * Kept here rather than in `foldFallbackNodes` so `isFallbackProperty`'s
+ * readers do not pull that whole pass into their chunk.
+ *
+ * `redriveallowpolicy` is deliberately absent: it names the queues allowed to
+ * redrive INTO this one — the reverse direction — so folding on it would swallow
+ * a real source queue.
+ */
+export const FALLBACK_KEYS: ReadonlySet<string> = new Set([
+  "redrivepolicy",
+  "deadletterconfig",
+  "deadletterqueue",
+  "deadlettertarget",
+  "deadlettertargetarn",
+  "deadletterarn",
+  // `OnFailure`, NOT its `DestinationConfig` parent: that block also holds
+  // `OnSuccess`, which is a real downstream path and must keep its own node and
+  // edge. Scoping on the nested key reaches the same reference either way,
+  // because the walk sets the scope at the first fallback key it meets
+  // going down, not only at the top level.
+  "onfailure",
+  // Azure. Both of these name a SEPARATE entity rather than a sub-queue, so
+  // both have a real node on the other end — the `<queue>/$DeadLetterQueue`
+  // sub-queue people think of is a different thing and never appears in a
+  // template. Neither FOLDS, though; see `EDGE_LABEL_KEYS`.
+  //
+  // `deadletterdestination` reaches the fold's matcher only through
+  // `viaProperty`: its value spells the target as a `resourceId(...)`
+  // expression, and `candidateIdsFor` offers the bare last segment only when
+  // the declarer sits under the target's namespace — which an Event Grid
+  // subscription does not. The ARM parser resolves that expression at parse
+  // time and tags the edge, which is why the key can be here at all. See #807.
+  "forwarddeadletteredmessagesto",
+  "deadletterdestination",
+  ...FALLBACK_LOG_KEYS,
+]);
+
+/**
+ * Whether a parser should record `property` as an edge's `viaProperty`.
+ *
+ * The Terraform plan and ARM parsers tag ONLY fallback-keyed properties, never
+ * every reference. The Pulumi plan parser is the exception (#2936): its inputs
+ * keep no reference at all, so it tags every edge, preferring a fallback key
+ * when several properties name one target, and every reader that treats a tag
+ * as meaning something tests it with this function. Why the others tag only
+ * fallback keys:
+ *
+ * - It makes the choice order-independent. Both callers keep the first property
+ *   that names a given target, and a DLQ referenced from some other property
+ *   too (a `policy`, a `tags` blob) would otherwise win or lose on JSON key
+ *   order and silently stop folding.
+ * - `viaProperty` is PERSISTED. Tagging every edge grows the canonical graph by
+ *   ~37 bytes per edge, and `writeHistorySnapshot` stores `graphData` inline in
+ *   a DynamoDB item against a hard 400 KB cap with no S3 fallback.
+ * - The field reaches anonymous gallery viewers through the public read, which
+ *   filters nodes and edges by predicate but never picks fields. Recording only
+ *   what the fold needs keeps that surface to a handful of known key names.
+ */
+export function isFallbackProperty(property: string): boolean {
+  return FALLBACK_KEYS.has(normalizeKey(property));
+}
+
 /** One property by normalized key, so a CloudFormation `MinCapacity` and a
  * Terraform `min_capacity` reach the same reader. The folds' one shared
  * reader: a fix here reaches every fold. */

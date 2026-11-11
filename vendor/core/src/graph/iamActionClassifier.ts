@@ -181,6 +181,34 @@ export function combinedIamAccess(access: ReadonlyMap<IamService, IamAccess>): I
   return combined;
 }
 
+/** Kept out of `IAM_SERVICES`: an invoke grant is not data access, and adding
+ * it there would draw "writes" to every function a policy may invoke. */
+const INVOKE_ACTIONS: ReadonlySet<string> = new Set([
+  "lambda:invokefunction",
+  "lambda:invokeasync",
+  "lambda:invokefunctionurl",
+]);
+
+/**
+ * A label for what a Deny statement's actions take away: "denies invoke",
+ * "denies writes". `undefined` unless every action is named exactly (no
+ * wildcard, since `lambda:*` denies far more than invoke) and all of them
+ * fall in one kind.
+ */
+export function deniedActionsLabel(actions: Iterable<string>): string | undefined {
+  let invoke = false;
+  let access: IamAccess | undefined;
+  for (const action of actions) {
+    const name = action.toLowerCase();
+    const entry = ACTIONS.get(name);
+    if (INVOKE_ACTIONS.has(name)) invoke = true;
+    else if (entry) access = mergeIamAccess(access, entry.access);
+    else return undefined;
+  }
+  if (invoke === (access !== undefined)) return undefined;
+  return access ? `denies ${IAM_ACCESS_LABELS[access]}` : "denies invoke";
+}
+
 /** `AWS::SQS::Queue` → `sqs`; `undefined` for a type outside the table. */
 export function iamServiceForCfnType(cfnType: string | undefined): IamService | undefined {
   const namespace = cfnType?.split("::")[1];

@@ -40,7 +40,9 @@ A card's first line is the resource's own description, and its title is the reso
 
 ## Setup (if the tools are missing)
 
-Add this to `.mcp.json`; it holds no credential:
+If the ArcSync Claude Code plugin is installed, it already starts this server: do not add a second entry. Instead check that Node.js 22 or later is on the PATH and that the server shows as connected in `/mcp`.
+
+Otherwise, add this to `.mcp.json`; it holds no credential:
 
 ```json
 {
