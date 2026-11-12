@@ -128,16 +128,36 @@ export interface HistoryListEntry {
   timestamp: string;
   parsedAt: string;
   commitSha?: string;
-  /** Absent until a diff has been computed for this row. */
+  /** Diff against the true previous snapshot. Absent on rows not yet backfilled. */
   changeSummary?: DeltaCounts;
+  /** Resource names for the change headline from `added`, `removed` and
+   * `changed` only (a code-only resource is never in `changed`), at most 3
+   * per group: the first 3 by display name (`localeCompare`). The full
+   * counts are in `changeSummary`. Absent whenever `changeSummary` is absent. */
+  changeNames?: HistoryChangeNames;
   /** Absent on rows written before the attribute existed; treat as "manual". */
   triggeredBy?: HistoryTrigger;
 }
 
-/** `GET /graphs/{id}/history`. */
+export interface HistoryChangeNames {
+  added: string[];
+  removed: string[];
+  changed: string[];
+}
+
+/** `GET /graphs/{id}/history`. With `?sample=1`, `entries` is a sample of at
+ * most 50 snapshots spanning the whole history, newest first, that
+ * always holds the oldest and newest snapshot. Snapshots with an architecture
+ * change are kept ahead of code-only ones, and rows with no `changeSummary`
+ * rank with code-only; the remaining slots are spread evenly across time.
+ * A history of at most 50 snapshots returns all of them.
+ * `total` is present only with `?sample=1`: the number of snapshots sampled
+ * from (`entries.length` when nothing was left out). `nextCursor` is then
+ * absent. */
 export interface HistoryListResponse {
   entries: HistoryListEntry[];
   nextCursor?: string;
+  total?: number;
 }
 
 /** `GET /graphs/{id}/history/{timestamp}`. No layout of its own: a snapshot
@@ -169,6 +189,9 @@ export interface HistoryDiff {
     added: DeltaNode[];
     removed: DeltaNode[];
     changed: ChangedNodeDetail[];
+    /** Changed only in deploy-artifact pointers; not in `changed`. Absent
+     * from servers that predate the classification. */
+    codeOnly?: ChangedNodeDetail[];
   };
   edges: { added: DeltaEdge[]; removed: DeltaEdge[] };
 }

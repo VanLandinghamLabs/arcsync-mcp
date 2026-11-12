@@ -573,7 +573,7 @@ describe("arcsync MCP server", () => {
       const { call } = await connect({
         [`GET /graphs/g1/history/${encodeURIComponent(ts)}/diff?against=previous`]: () => ({
           counts,
-          nodes: { added: manyNodes(), removed: [], changed: manyNodes() },
+          nodes: { added: manyNodes(), removed: [], changed: manyNodes(), codeOnly: manyNodes() },
           edges: { added: [], removed: manyEdges(50) },
         }),
       });
@@ -581,6 +581,7 @@ describe("arcsync MCP server", () => {
       const out = expectListsCut(text, "https://arcsync.dev/canvas/g1", [
         "resources.added",
         "resources.changed",
+        "resources.codeOnly",
       ]);
       expect(at(out, "relationships.removed")).toHaveLength(50);
     });

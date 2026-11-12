@@ -2,6 +2,7 @@
 // cycle with graphDelta.ts, which imports diffNodeAttributes back from here.
 import type { DeltaNode } from "./graphDelta.js";
 import { stableStringify } from "./stableStringify.js";
+import { lookupByType } from "./typeLookup.js";
 import type { ResourceNode } from "./types.js";
 
 export interface AttributeChange {
@@ -104,6 +105,92 @@ function walk(before: unknown, after: unknown, path: string[], out: AttributeCha
   }
 
   out.push({ path, before, after, significance: significanceOf(path) });
+}
+
+const LAMBDA_CODE = ["Code.S3Bucket", "Code.S3Key", "Code.S3ObjectVersion"];
+const LAYER_CONTENT = ["Content.S3Bucket", "Content.S3Key", "Content.S3ObjectVersion"];
+const TF_LAMBDA = ["filename", "s3_bucket", "s3_key", "s3_object_version", "source_code_hash"];
+const PULUMI_LAMBDA = ["code", "s3Bucket", "s3Key", "s3ObjectVersion", "sourceCodeHash"];
+
+/**
+ * Attribute paths, by resource type, that point at a deploy artifact rather
+ * than describe the resource: a CDK asset hash in `Code.S3Key`, a bundle's
+ * object key. A build changes them on every deploy. `*` matches every element
+ * of an array.
+ */
+const DEPLOY_ARTIFACT_PATHS: Record<string, readonly string[]> = {
+  "AWS::Lambda::Function": [...LAMBDA_CODE, "Code.ZipFile"],
+  "AWS::Serverless::Function": ["CodeUri", "InlineCode"],
+  "AWS::Lambda::LayerVersion": LAYER_CONTENT,
+  "AWS::Serverless::LayerVersion": ["ContentUri"],
+  "Custom::CDKBucketDeployment": ["SourceBucketNames", "SourceObjectKeys"],
+  aws_lambda_function: TF_LAMBDA,
+  aws_lambda_layer_version: TF_LAMBDA,
+  "aws:lambda/function:Function": PULUMI_LAMBDA,
+  "aws:lambda/layerVersion:LayerVersion": PULUMI_LAMBDA,
+};
+
+/** Container image references. Only the tag or digest is a deploy pointer; a
+ * different repository is a different image. */
+const IMAGE_PATHS: Record<string, readonly string[]> = {
+  "AWS::Lambda::Function": ["Code.ImageUri"],
+  "AWS::Serverless::Function": ["ImageUri"],
+  "AWS::ECS::TaskDefinition": ["ContainerDefinitions.*.Image"],
+  aws_lambda_function: ["image_uri"],
+  "aws:lambda/function:Function": ["imageUri"],
+};
+
+/** `host:5000/repo:tag@sha256:…` -> `host:5000/repo`. A `:` before the last
+ * `/` is a registry port, not a tag. */
+function imageRepository(ref: string): string {
+  const name = ref.split("@")[0];
+  const colon = name.lastIndexOf(":");
+  return colon > name.lastIndexOf("/") ? name.slice(0, colon) : name;
+}
+
+/** The repository of every string in an image value; an intrinsic such as
+ * `Fn::Sub` keeps its shape with each string leaf reduced the same way. */
+function imageRepositories(value: unknown): unknown {
+  if (typeof value === "string") return imageRepository(value);
+  if (Array.isArray(value)) return value.map(imageRepositories);
+  if (isPlainObject(value)) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, imageRepositories(v)]));
+  }
+  return value;
+}
+
+/** `value` with `fn` applied at `path`; a result of `undefined` drops the key. */
+function mapAt(value: unknown, path: readonly string[], fn: (v: unknown) => unknown): unknown {
+  const [head, ...rest] = path;
+  if (head === "*") return Array.isArray(value) ? value.map((v) => mapAt(v, rest, fn)) : value;
+  if (!isPlainObject(value) || !Object.hasOwn(value, head)) return value;
+  const next = rest.length === 0 ? fn(value[head]) : mapAt(value[head], rest, fn);
+  const others = Object.entries(value).filter(([k]) => k !== head);
+  return Object.fromEntries(next === undefined ? others : [...others, [head, next]]);
+}
+
+const applyAll = (
+  value: unknown,
+  paths: readonly string[] | undefined,
+  fn: (v: unknown) => unknown,
+): unknown => (paths ?? []).reduce((acc, p) => mapAt(acc, p.split("."), fn), value);
+
+/** `attributes` without the resource type's deploy-artifact pointers: those
+ * paths dropped, and image references cut to their repository. */
+export function withoutDeployArtifacts(
+  resourceType: string,
+  attributes: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!attributes) return attributes;
+  const dropped = applyAll(
+    attributes,
+    lookupByType(DEPLOY_ARTIFACT_PATHS, resourceType),
+    () => undefined,
+  );
+  return applyAll(dropped, lookupByType(IMAGE_PATHS, resourceType), imageRepositories) as Record<
+    string,
+    unknown
+  >;
 }
 
 export function diffNodeAttributes(

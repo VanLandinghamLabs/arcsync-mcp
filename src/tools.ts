@@ -261,6 +261,7 @@ const DELTA_LISTS = [
   "resources.added",
   "resources.removed",
   "resources.changed",
+  "resources.codeOnly",
   "relationships.added",
   "relationships.removed",
 ];

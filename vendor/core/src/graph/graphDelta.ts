@@ -1,4 +1,8 @@
-import { type ChangedNodeDetail, diffNodeAttributes } from "./attributeDiff.js";
+import {
+  type ChangedNodeDetail,
+  diffNodeAttributes,
+  withoutDeployArtifacts,
+} from "./attributeDiff.js";
 import { stableStringify } from "./stableStringify.js";
 import { lookupByType } from "./typeLookup.js";
 import type { ArchGraph, EdgeType, ResourceEdge, ResourceNode, ResourceType } from "./types.js";
@@ -24,6 +28,9 @@ export interface GraphDelta {
   added: DeltaNode[];
   removed: DeltaNode[];
   changed: DeltaNode[];
+  /** Changed only in deploy-artifact pointers; not in `changed`. Absent from
+   * deltas stored before the classification existed. */
+  codeOnly?: DeltaNode[];
   edgesAdded: DeltaEdge[];
   edgesRemoved: DeltaEdge[];
 }
@@ -36,6 +43,10 @@ export interface DeltaCounts {
   edgesRemoved: number;
   /** added + removed + changed */
   resources: number;
+  /** Changed resources whose only changes are deploy-artifact pointers
+   * (`Code.S3Key` and the like). Counted here, not in `changed` or
+   * `resources`. Absent on summaries stored before it existed. */
+  codeOnly?: number;
 }
 
 export interface DeltaBaseInfo {
@@ -80,6 +91,21 @@ function fingerprint(n: ResourceNode): string {
   return stableStringify(picked);
 }
 
+const withoutArtifacts = (n: ResourceNode): ResourceNode => ({
+  ...n,
+  attributes: withoutDeployArtifacts(n.resourceType, n.attributes) as ResourceNode["attributes"],
+});
+
+/** True when two versions of a node differ, and differ only in deploy-artifact
+ * pointers. Any other persisted difference, `resourceType` included, makes it
+ * a real change. */
+export function isCodeOnlyChange(before: ResourceNode, after: ResourceNode): boolean {
+  return (
+    fingerprint(before) !== fingerprint(after) &&
+    fingerprint(withoutArtifacts(before)) === fingerprint(withoutArtifacts(after))
+  );
+}
+
 const toDeltaNode = (n: ResourceNode): DeltaNode => ({
   id: n.id,
   type: n.type,
@@ -109,11 +135,14 @@ export function diffGraphs(base: ArchGraph, head: ArchGraph): GraphDelta {
 
   const added: DeltaNode[] = [];
   const changed: DeltaNode[] = [];
+  const codeOnly: DeltaNode[] = [];
   const removed: DeltaNode[] = [];
   for (const [id, n] of headNodes) {
     const b = baseNodes.get(id);
     if (!b) added.push(toDeltaNode(n));
-    else if (fingerprint(b) !== fingerprint(n)) changed.push(toDeltaNode(n));
+    else if (fingerprint(b) === fingerprint(n)) continue;
+    else if (isCodeOnlyChange(b, n)) codeOnly.push(toDeltaNode(n));
+    else changed.push(toDeltaNode(n));
   }
   for (const [id, n] of baseNodes) {
     if (!headNodes.has(id)) removed.push(toDeltaNode(n));
@@ -130,6 +159,7 @@ export function diffGraphs(base: ArchGraph, head: ArchGraph): GraphDelta {
     added: added.sort(byId),
     removed: removed.sort(byId),
     changed: changed.sort(byId),
+    codeOnly: codeOnly.sort(byId),
     edgesAdded: edgesAdded.sort(byEdge),
     edgesRemoved: edgesRemoved.sort(byEdge),
   };
@@ -143,6 +173,7 @@ export function deltaCounts(d: GraphDelta): DeltaCounts {
     edgesAdded: d.edgesAdded.length,
     edgesRemoved: d.edgesRemoved.length,
     resources: d.added.length + d.removed.length + d.changed.length,
+    codeOnly: d.codeOnly?.length ?? 0,
   };
 }
 
@@ -191,6 +222,7 @@ export interface DetailedGraphDelta {
   added: DeltaNode[];
   removed: DeltaNode[];
   changed: ChangedNodeDetail[];
+  codeOnly: ChangedNodeDetail[];
   edgesAdded: DeltaEdge[];
   edgesRemoved: DeltaEdge[];
 }
@@ -204,12 +236,16 @@ export function diffGraphsDetailed(base: ArchGraph, head: ArchGraph): DetailedGr
   const baseNodes = new Map(nodesOf(base).map((n) => [n.id, n]));
   const headNodes = new Map(nodesOf(head).map((n) => [n.id, n]));
 
-  const changed: ChangedNodeDetail[] = shallow.changed.map((n) => {
+  const detailed = (n: DeltaNode): ChangedNodeDetail => {
     const b = baseNodes.get(n.id);
     const h = headNodes.get(n.id);
     const detail = b && h ? diffNodeAttributes(b, h) : { changes: [], truncated: 0 };
     return { ...n, changes: detail.changes, truncated: detail.truncated };
-  });
+  };
 
-  return { ...shallow, changed };
+  return {
+    ...shallow,
+    changed: shallow.changed.map(detailed),
+    codeOnly: (shallow.codeOnly ?? []).map(detailed),
+  };
 }
