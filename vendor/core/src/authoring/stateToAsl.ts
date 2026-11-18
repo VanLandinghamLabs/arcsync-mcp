@@ -317,11 +317,18 @@ export const stateAstToAsl = (
       else if (list.length === 1 && def.kind !== "choice") {
         shape = { Type: "Pass", ...single(list[0] as Exit) };
       } else shape = { Type: "Choice", ...rules(def, list) };
-      States[id] = {
-        ...shape,
-        ...(def.label === undefined ? {} : { ArcSyncLabel: def.label }),
-        ...(def.description.length > 0 ? { Comment: def.description.join("\n") } : {}),
-      };
+      // Defined rather than assigned: a state id of `__proto__` would otherwise
+      // set the object's prototype instead of adding a state.
+      Object.defineProperty(States, id, {
+        value: {
+          ...shape,
+          ...(def.label === undefined ? {} : { ArcSyncLabel: def.label }),
+          ...(def.description.length > 0 ? { Comment: def.description.join("\n") } : {}),
+        },
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
     return { StartAt: startAt, States };
   };

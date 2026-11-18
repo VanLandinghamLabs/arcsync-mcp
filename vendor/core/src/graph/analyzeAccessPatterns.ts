@@ -1,4 +1,5 @@
 import { createEdgeIdMinter } from "./edgeIds.js";
+import { resolveTfRef } from "./eventFlows/refs.js";
 import { classifyIamAccess, combinedIamAccess, type IamAccess } from "./iamActionClassifier.js";
 import type { ArchGraph, EdgeDirection } from "./types.js";
 import { EdgeType, ResourceType } from "./types.js";
@@ -101,6 +102,28 @@ function classificationToDirection(
   return "bidirectional";
 }
 
+const isIdChar = (c: string | undefined) => c !== undefined && /[\w-]/.test(c);
+
+function containsToken(haystack: string, token: string): boolean {
+  if (token === "") return false;
+  for (let i = haystack.indexOf(token); i !== -1; i = haystack.indexOf(token, i + 1)) {
+    if (!isIdChar(haystack[i - 1]) && !isIdChar(haystack[i + token.length])) return true;
+  }
+  return false;
+}
+
+/** The one server whose node id or name appears in `value` as a whole token,
+ * so `primary` never matches inside `primary_dr`; undefined when none or
+ * several do. */
+function soleTokenMatch(value: unknown, servers: Map<string, string>): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const matches = new Set<string>();
+  for (const [name, id] of servers) {
+    if (containsToken(value, id) || containsToken(value, name)) matches.add(id);
+  }
+  return matches.size === 1 ? [...matches][0] : undefined;
+}
+
 /**
  * Detect GCP and Azure containment/reference relationships by scanning node attributes.
  * Returns additional edges to be merged into the graph.
@@ -124,6 +147,12 @@ function detectCloudRelationships(graph: ArchGraph): ArchGraph {
   const azureSqlServers = new Map<string, string>(); // server name -> node id
   const azureResourceGroups = new Map<string, string>(); // rg name -> node id
   const gcpPubsubTopics = new Map<string, string>(); // topic name/id -> node id
+  const nodeTypes = new Map(graph.nodes.map((n) => [n.id, n.type]));
+  // HCL leaves a reference as `${type.label.attr}`, which no name key matches.
+  const refTo = (value: unknown, type: ResourceType): string | undefined => {
+    const id = resolveTfRef(value);
+    return id !== null && nodeTypes.get(id) === type ? id : undefined;
+  };
 
   for (const node of graph.nodes) {
     if (node.type === ResourceType.GCP_COMPUTE_NETWORK) {
@@ -147,7 +176,8 @@ function detectCloudRelationships(graph: ArchGraph): ArchGraph {
       const network = node.attributes.network as string | undefined;
       if (network) {
         // Network attribute can be a name or a self_link; try matching by name
-        const networkId = gcpNetworks.get(network);
+        const networkId =
+          refTo(network, ResourceType.GCP_COMPUTE_NETWORK) ?? gcpNetworks.get(network);
         if (networkId) {
           addEdgeIfNew(networkId, node.id, EdgeType.CONTAINS);
         }
@@ -158,7 +188,7 @@ function detectCloudRelationships(graph: ArchGraph): ArchGraph {
     if (node.type === ResourceType.GCP_PUBSUB_SUBSCRIPTION) {
       const topic = node.attributes.topic as string | undefined;
       if (topic) {
-        const topicId = gcpPubsubTopics.get(topic);
+        const topicId = refTo(topic, ResourceType.GCP_PUBSUB_TOPIC) ?? gcpPubsubTopics.get(topic);
         if (topicId) {
           addEdgeIfNew(node.id, topicId, EdgeType.REFERENCE);
         }
@@ -169,7 +199,8 @@ function detectCloudRelationships(graph: ArchGraph): ArchGraph {
     if (node.type === ResourceType.AZURE_SUBNET) {
       const vnetName = node.attributes.virtual_network_name as string | undefined;
       if (vnetName) {
-        const vnetId = azureVnets.get(vnetName);
+        const vnetId =
+          refTo(vnetName, ResourceType.AZURE_VIRTUAL_NETWORK) ?? azureVnets.get(vnetName);
         if (vnetId) {
           addEdgeIfNew(vnetId, node.id, EdgeType.CONTAINS);
         }
@@ -180,11 +211,11 @@ function detectCloudRelationships(graph: ArchGraph): ArchGraph {
     if (node.type === ResourceType.AZURE_SQL_DATABASE) {
       const serverId = node.attributes.server_id as string | undefined;
       if (serverId) {
-        // server_id may be a full ID or just a name
+        // server_id may be a reference, a full ARM ID or just a name
         const serverNodeId =
+          refTo(serverId, ResourceType.AZURE_SQL_SERVER) ??
           azureSqlServers.get(serverId) ??
-          [...azureSqlServers.values()].find((id) => serverId.includes(id)) ??
-          [...azureSqlServers.entries()].find(([name]) => serverId.includes(name))?.[1];
+          soleTokenMatch(serverId, azureSqlServers);
         if (serverNodeId) {
           addEdgeIfNew(serverNodeId, node.id, EdgeType.CONTAINS);
         }
@@ -195,7 +226,8 @@ function detectCloudRelationships(graph: ArchGraph): ArchGraph {
     if (node.type !== ResourceType.AZURE_RESOURCE_GROUP) {
       const rgName = node.attributes.resource_group_name as string | undefined;
       if (rgName) {
-        const rgId = azureResourceGroups.get(rgName);
+        const rgId =
+          refTo(rgName, ResourceType.AZURE_RESOURCE_GROUP) ?? azureResourceGroups.get(rgName);
         if (rgId) {
           addEdgeIfNew(rgId, node.id, EdgeType.CONTAINS);
         }

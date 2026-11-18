@@ -229,11 +229,17 @@ function buildV2Rows(
     // and since a resolved authorizer node is folded away below (see
     // extractAuthorizer), that targetId would dangle, pointing at a node no
     // longer in the graph.
-    const targetEdge = (outBySource.get(routeId) ?? []).find((e) => {
+    const candidates = (outBySource.get(routeId) ?? []).filter((e) => {
       if (e.target === apiNode.id) return false;
       const candidate = nodeById.get(e.target);
       return candidate !== undefined && !AUTHORIZER_RESOURCE_TYPES.has(candidate.resourceType);
     });
+    // collapseIntegrations appends its labelled route→backend edges after every
+    // parser edge, so a depends_on or model reference would otherwise win.
+    const targetEdge =
+      candidates.find((e) => e.label !== undefined) ??
+      candidates.find((e) => !isRestPlumbing(nodeById.get(e.target) as ResourceNode)) ??
+      candidates[0];
     const authorizer = extractAuthorizer(routeId, routeNode, nodeById, outBySource);
     if (authorizer?.nodeId) {
       consumedIds.add(authorizer.nodeId);

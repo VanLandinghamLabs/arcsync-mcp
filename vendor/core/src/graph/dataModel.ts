@@ -45,6 +45,7 @@ export const DATA_MODEL_ATTRIBUTE = "DataModel";
 
 const MAX_ENTITIES = 60;
 const MAX_FIELDS = 80;
+const MAX_RELATIONSHIPS = MAX_ENTITIES * 4;
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -88,14 +89,27 @@ function storedModel(raw: unknown): DataModel | undefined {
   }
   if (entities.length === 0) return undefined;
   const names = new Set(entities.map((e) => e.name));
-  const relationships = (Array.isArray(raw.relationships) ? raw.relationships : []).filter(
-    (r): r is DataRelationship =>
-      isRecord(r) &&
-      names.has(r.from as string) &&
-      names.has(r.to as string) &&
-      Object.hasOwn(CARDINALITY_GLYPH, r.fromCardinality as string) &&
-      Object.hasOwn(CARDINALITY_GLYPH, r.toCardinality as string),
-  );
+  const relationships: DataRelationship[] = [];
+  for (const r of Array.isArray(raw.relationships) ? raw.relationships : []) {
+    if (relationships.length >= MAX_RELATIONSHIPS) break;
+    if (
+      !isRecord(r) ||
+      !names.has(r.from as string) ||
+      !names.has(r.to as string) ||
+      !Object.hasOwn(CARDINALITY_GLYPH, r.fromCardinality as string) ||
+      !Object.hasOwn(CARDINALITY_GLYPH, r.toCardinality as string)
+    )
+      continue;
+    const label = str(r.label);
+    relationships.push({
+      from: r.from as string,
+      to: r.to as string,
+      fromCardinality: r.fromCardinality as Cardinality,
+      toCardinality: r.toCardinality as Cardinality,
+      ...(label ? { label } : {}),
+      identifying: r.identifying === true,
+    });
+  }
   return { entities, relationships };
 }
 

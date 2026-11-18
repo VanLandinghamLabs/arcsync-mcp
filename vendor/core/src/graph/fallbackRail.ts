@@ -27,7 +27,7 @@ export const FALLBACK_RAIL_PAD_X = 8;
 /** Left edge of the type tag, after the `↳` glyph. */
 export const FALLBACK_RAIL_TAG_X = 20;
 /** Rail text sizes. 12px because rails draw at the detail tier, which starts
- * at 80%, and nothing may paint under 9px on screen. */
+ * at 60%, and nothing may paint under 7px on screen there. */
 export const FALLBACK_RAIL_TAG_FONT = 12;
 export const FALLBACK_RAIL_NAME_FONT = 12;
 export const FALLBACK_RAIL_DETAIL_FONT = 12;

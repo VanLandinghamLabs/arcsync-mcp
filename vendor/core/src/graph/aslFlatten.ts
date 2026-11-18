@@ -190,7 +190,13 @@ function substituteEmbeddedRefs(value: unknown, refs: string[], depth: number): 
     for (const [key, v] of Object.entries(obj)) {
       const resolved = substituteEmbeddedRefs(v, refs, depth - 1);
       if (resolved === SUBSTITUTE_FAILED) return SUBSTITUTE_FAILED;
-      result[key] = resolved;
+      // Defined, not assigned: an ASL state may be named `__proto__`.
+      Object.defineProperty(result, key, {
+        value: resolved,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
     return result;
   }

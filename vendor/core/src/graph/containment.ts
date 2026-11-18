@@ -149,8 +149,12 @@ export function soleRootResourceCount(
     for (const kid of kids) if (!parentOf.has(kid)) parentOf.set(kid, parent);
   }
   const inside = (id: string) => {
-    for (let p = parentOf.get(id); p !== undefined; p = parentOf.get(p))
+    // CONTAINS edges are unvalidated input, so a chain can cycle.
+    const seen = new Set<string>();
+    for (let p = parentOf.get(id); p !== undefined && !seen.has(p); p = parentOf.get(p)) {
       if (p === root) return true;
+      seen.add(p);
+    }
     return false;
   };
   let count = 0;

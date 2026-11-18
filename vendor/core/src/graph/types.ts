@@ -553,6 +553,10 @@ export interface ResourceNode {
   cdkDefaults?: string[];
   position?: { x: number; y: number };
   size?: { width: number; height: number };
+  /** A container's corner as layout placed it, before any pin moved or grew
+   * it: what a `StoredPosition` inside it is measured from. Set by
+   * `layoutGraph`, never persisted. */
+  pinOrigin?: { x: number; y: number };
   /** Synthesized by the display-time `collapseRouteTables` pass. Never parsed,
    * never persisted. */
   routeTable?: RouteTable;
@@ -730,6 +734,22 @@ export interface GraphMetadata {
    * parsed before that lacks it, so the canvas attaches DynamoDB models itself.
    */
   dataModels?: true;
+  /**
+   * What a parser could not draw in full. Absent rather than empty when there
+   * is nothing to report, so a graph with no warning serialises, and hashes
+   * (`hashGraphData`), exactly as it did before the field existed.
+   */
+  warnings?: GraphWarning[];
+}
+
+export type GraphWarningCode = "ARM_DEPLOYMENT_DEPTH";
+
+export interface GraphWarning {
+  code: GraphWarningCode;
+  message: string;
+  /** The node the warning is about, by its id in the graph that carries it:
+   *  a merge that renames the node renames this with it. */
+  nodeId?: string;
 }
 
 export const GRAPH_RANKDIRS = ["TB", "LR"] as const;
@@ -766,7 +786,9 @@ export interface LayoutOptions {
   nodeWidth?: number;
   nodeHeight?: number;
   /** Pre-set positions for specific nodes (used for edge-only re-routing). */
-  pinnedPositions?: Record<string, { x: number; y: number }>;
+  pinnedPositions?: Record<string, StoredPosition>;
+  /** `false` returns the engine's own placement, without `compactLayout`. */
+  compact?: boolean;
   /**
    * Ids withheld from the layout engine: they are given no position here, and
    * every edge incident to one is withheld too. Only the layout INPUT is
@@ -817,6 +839,14 @@ export interface LayoutOptions {
    * `NODE_WIDTH`/`NODE_HEIGHT` for it same as any other sizeless node.
    */
   unranked?: ReadonlySet<string>;
+  /**
+   * The text each container's name chip shows, by container id, when it is
+   * not the node's own `name`: the canvas leads with the type and reads the
+   * rename override. Layout reserves room above a container's first child for
+   * this text wrapped to the container's width, less `lead`: the chip-unit
+   * width of the icon, swatch and chevron drawn beside it.
+   */
+  containerTitles?: Readonly<Record<string, { text: string; lead?: number }>>;
 }
 
 export type InkColor = "amber" | "red" | "green" | "blue" | "neutral";
@@ -843,8 +873,25 @@ export interface InkStroke {
   createdAt: string;
 }
 
+/**
+ * A node the user dragged. `x`/`y` are where it was drawn. `dx`/`dy` are the
+ * same point measured from the `pinOrigin` of its container `parent`, and win
+ * while the node is still in `parent`, so a layout that moves the container
+ * moves the node with it. Offsets rather than a stored corner because
+ * collaborators' deltas merge field by field: two offsets into one container
+ * still describe a point in it, where one peer's `x` against another's corner
+ * would not.
+ */
+export interface StoredPosition {
+  x: number;
+  y: number;
+  parent?: string;
+  dx?: number;
+  dy?: number;
+}
+
 export interface DiagramOverrides {
-  positions: Record<string, { x: number; y: number }>;
+  positions: Record<string, StoredPosition>;
   labels: Record<string, string>;
   hiddenGroups: string[];
   stickies?: Record<string, StickyNote>;

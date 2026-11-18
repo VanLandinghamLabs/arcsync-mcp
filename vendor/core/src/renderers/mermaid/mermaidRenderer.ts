@@ -4,6 +4,7 @@ import {
   isAuthored,
   stringAttr,
 } from "../../graph/authored.js";
+import { authoredColors } from "../../graph/authoredDepth.js";
 import { containerChildSets } from "../../graph/containment.js";
 import { foldNetworkGlue } from "../../graph/foldNetworkGlue.js";
 import type { GraphDelta } from "../../graph/graphDelta.js";
@@ -416,10 +417,13 @@ function arcsyncKind(node: ResourceNode): string | undefined {
   return known && node.type !== ResourceType.UNKNOWN ? known : node.resourceType || known;
 }
 
-function arcsyncProps(node: ResourceNode): string[] {
+function scalarEntries(
+  attributes: Record<string, unknown> | undefined,
+  skip: ReadonlySet<string>,
+): string[] {
   const props: string[] = [];
-  for (const [key, value] of Object.entries(node.attributes ?? {})) {
-    if (NON_PROP_KEYS.has(key)) continue;
+  for (const [key, value] of Object.entries(attributes ?? {})) {
+    if (skip.has(key)) continue;
     if ((typeof value === "number" && Number.isFinite(value)) || typeof value === "boolean")
       props.push(`${metaKey(key)}: ${value}`);
     else if (typeof value === "string" && value.length <= MAX_ARCSYNC_PROP_CHARS)
@@ -427,6 +431,9 @@ function arcsyncProps(node: ResourceNode): string[] {
   }
   return props;
 }
+
+const arcsyncProps = (node: ResourceNode): string[] =>
+  scalarEntries(node.attributes, NON_PROP_KEYS);
 
 /** `["name"]@{ … }`. The bracket label is read up to the next `"` and never
  * entity-decoded, so a name it cannot carry verbatim also goes in the
@@ -459,6 +466,8 @@ function arcsyncMeta(node: ResourceNode, label?: string): string {
     const text = stringAttr(node, key);
     if (text) entries.push(`${key}: ${metaString(text)}`);
   }
+  for (const [key, color] of Object.entries(authoredColors(node)))
+    entries.push(`${key}: ${metaString(color)}`);
   const props = arcsyncProps(node);
   if (props.length > 0) entries.push(`props: { ${props.join(", ")} }`);
   return entries.length > 0 ? `@{ ${entries.join(", ")} }` : "";
@@ -571,16 +580,39 @@ function renderContainer(
   ctx.lines.push(`${indent}end`);
 }
 
+/** The `kind` `parseArcsync` maps back to each edge type (bundle.ts's
+ * `EDGE_TYPES`, inverted). */
+const EDGE_KIND_BY_TYPE: Partial<Record<EdgeType, string>> = {
+  [EdgeType.REFERENCE]: "sync",
+  [EdgeType.EVENT_FLOW]: "async",
+  [EdgeType.DEPENDENCY]: "data",
+  [EdgeType.NETWORK]: "network",
+  [EdgeType.IAM]: "iam",
+};
+const EDGE_META_SKIP: ReadonlySet<string> = new Set(["kind"]);
+
+/** An edge's `@{ … }` in ArcSync syntax: its kind, when the arrow style alone
+ * would read back as another type, and its scalar attributes. */
+function arcsyncEdgeMeta(edge: ResourceEdge, dotted: boolean): string {
+  const entries: string[] = [];
+  const kind = lookupByType(EDGE_KIND_BY_TYPE, edge.type);
+  if (kind && kind !== (dotted ? "async" : "sync")) entries.push(`kind: ${metaString(kind)}`);
+  entries.push(...scalarEntries(edge.attributes, EDGE_META_SKIP));
+  return entries.length > 0 ? `@{ ${entries.join(", ")} }` : "";
+}
+
 function edgeLine(edge: ResourceEdge, ids: Map<string, string>, arcsync: boolean): string {
   const source = ids.get(edge.source);
   const target = ids.get(edge.target);
   const text = edge.label && (arcsync ? arcsyncEdgeLabel : escapeMermaidLabel)(edge.label);
-  const label = text ? `|"${text}"|` : "";
   // Async edges are dotted, as are best-effort cross-engine matches (literal/ARN,
   // not a real reference in either engine's source): the same visual distinction
   // the canvas makes with a dashed stroke, so an exported Mermaid artifact never
   // presents a guess as a parsed fact.
-  const shaft = edge.type === EdgeType.EVENT_FLOW || edge.inferredCrossEngine ? "-.-" : "--";
+  const dotted = edge.type === EdgeType.EVENT_FLOW || edge.inferredCrossEngine === true;
+  const shaft = dotted ? "-.-" : "--";
+  const meta = arcsync ? arcsyncEdgeMeta(edge, dotted) : "";
+  const label = text || meta ? `|"${text || ""}"|${meta}` : "";
 
   // Mermaid's flowchart grammar has no one-sided `<--` link, so a reverse
   // edge swaps its endpoints and draws a forward arrow.

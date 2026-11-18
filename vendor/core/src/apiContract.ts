@@ -261,6 +261,13 @@ export interface GraphStatusResult {
   graphId: string;
   status: JobStatus;
   error?: string;
+  /** On a JOB# row still pending or running: its worker is taken for lost,
+   * the rule that frees the row for a re-parse. */
+  stale?: true;
+  /** On a diagram, for its members: the runs other members have parsing it
+   * now, by the id the room's `parse-started` and `parse-ended` frames carry.
+   * `null` when they could not be read. */
+  parseRuns?: string[] | null;
   [key: string]: unknown;
 }
 
@@ -277,6 +284,13 @@ export interface ThumbnailPreview {
    * `scene-extent`, for the canonical layout. Absent on renders older than
    * the field. */
   extent?: { width: number; height: number };
+  /** Whether `light` and `dark` are drawn in the far card layout. Absent on
+   * renders older than the field. */
+  far?: boolean;
+  /** The same render's SVGs in the other layout, and the extent they frame:
+   * canvas-view opens in whichever its fit on this screen picks. Only on a
+   * diagram large enough to get a preview. */
+  alt?: { light?: string; dark?: string; extent: { width: number; height: number } };
 }
 
 /** The CANON fields an invited outsider gets under `canonical`: an allowlist,
@@ -295,6 +309,10 @@ export interface OutsiderCanonicalFields {
 /** A signed-in caller with no holding org, on a public CANON: the outsider
  * set plus the descriptive fields the gallery serves anonymously. */
 export interface PublicCanonicalFields extends OutsiderCanonicalFields {
+  /** `https://{host}/{owner}/{repo}` on the host the repoKey names (or
+   * `local:{folder}` for an upload), derived per read; "" when the display
+   * fields are empty. */
+  repoUrl: string;
   displayOwner: string;
   displayRepo: string;
   subpath: string;
@@ -699,9 +717,13 @@ export interface GraphSummary {
    *  predating the field. */
   addedBy?: string;
   /** JOB# rows only: the repoKey this parse will land on, derived server-side
-   *  from the row's repoUrl/branch/pathOverride. Lets the library fold an
-   *  in-flight re-parse into the card it refreshes. Absent for local uploads. */
+   *  from the row's repoUrl/branch/pathOverride (a local upload's from its
+   *  folder and owner). Lets the library fold an in-flight re-parse into the
+   *  card it refreshes, and an open canvas find the parse to follow. */
   targetRepoKey?: string;
+  /** JOB# rows carrying `targetRepoKey` only: still pending or running, but
+   *  its worker is taken for lost (`GraphStatusResult.stale`). */
+  stale?: true;
   /** Library view only: the in-flight re-parse the API folded into this card
    *  (its JOB# row is not listed separately). */
   inFlightJobId?: string;
